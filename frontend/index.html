@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Herramienta OCR para Odoo</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            color: #2d3748;
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #718096;
+            font-size: 16px;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .stat-card {
+            background: #f7fafc;
+            padding: 15px;
+            border-radius: 12px;
+            text-align: center;
+            border: 2px solid #e2e8f0;
+        }
+
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2d3748;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #718096;
+            margin-top: 5px;
+        }
+
+        .config-section {
+            margin-bottom: 25px;
+        }
+
+        .config-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #edf2f7;
+            padding: 15px;
+            border-radius: 12px;
+            cursor: pointer;
+            margin-bottom: 15px;
+        }
+
+        .config-header h3 {
+            color: #2d3748;
+            font-size: 16px;
+        }
+
+        .config-toggle {
+            background: none;
+            border: none;
+            font-size: 18px;
+            color: #4a5568;
+            cursor: pointer;
+        }
+
+        .config-content {
+            display: none;
+            animation: slideDown 0.3s ease;
+        }
+
+        .config-content.show {
+            display: block;
+        }
+
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #2d3748;
+            font-weight: 500;
+        }
+
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 10px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #2d3748;
+        }
+
+        .btn-secondary:hover {
+            background: #cbd5e0;
+        }
+
+        .btn-success {
+            background: #38a169;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #2f855a;
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .camera-container {
+            position: relative;
+            width: 100%;
+            height: 300px;
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 20px;
+            background: #2d3748;
+        }
+
+        #video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        #canvas {
+            display: none;
+        }
+
+        .camera-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+        }
+
+        .scan-frame {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%;
+            height: 60%;
+            border: 3px solid #38a169;
+            border-radius: 12px;
+            background: rgba(56, 161, 105, 0.1);
+        }
+
+        .scan-corners::before,
+        .scan-corners::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #38a169;
+        }
+
+        .scan-corners::before {
+            top: -3px;
+            left: -3px;
+            border-right: none;
+            border-bottom: none;
+        }
+
+        .scan-corners::after {
+            bottom: -3px;
+            right: -3px;
+            border-left: none;
+            border-top: none;
+        }
+
+        .camera-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .status {
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            font-weight: 500;
+            text-align: center;
+        }
+
+        .status-info {
+            background: #bee3f8;
+            color: #2c5282;
+            border: 2px solid #90cdf4;
+        }
+
+        .status-success {
+            background: #c6f6d5;
+            color: #22543d;
+            border: 2px solid #9ae6b4;
+        }
+
+        .status-error {
+            background: #fed7d7;
+            color: #742a2a;
+            border: 2px solid #fc8181;
+        }
+
+        .text-area {
+            width: 100%;
+            min-height: 120px;
+            padding: 15px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 16px;
+            resize: vertical;
+            font-family: inherit;
+            margin-bottom: 15px;
+        }
+
+        .text-area:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .confidence-bar {
+            width: 100%;
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #fc8181 0%, #f6e05e 50%, #68d391 100%);
+            transition: width 0.3s;
+        }
+
+        .flash-effect {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: white;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        .connection-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .status-connected {
+            background: #38a169;
+        }
+
+        .status-disconnected {
+            background: #e53e3e;
+        }
+
+        .status-testing {
+            background: #d69e2e;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .shortcuts {
+            background: #f7fafc;
+            padding: 15px;
+            border-radius: 12px;
+            margin-top: 20px;
+            font-size: 12px;
+            color: #718096;
+        }
+
+        .shortcuts h4 {
+            color: #2d3748;
+            margin-bottom: 8px;
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                margin: 0;
+                border-radius: 0;
+                min-height: 100vh;
+            }
+
+            .stats {
+                grid-template-columns: 1fr;
+            }
+
+            .camera-controls {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📱 OCR → Odoo</h1>
+            <p>Escanea documentos con tu cámara</p>
+        </div>
+
+        <!-- Estadísticas -->
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-number" id="docsProcessed">0</div>
+                <div class="stat-label">Procesados</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="docsSent">0</div>
+                <div class="stat-label">Enviados</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="avgConfidence">0%</div>
+                <div class="stat-label">Confianza</div>
+            </div>
+        </div>
+
+        <!-- Configuración -->
+        <div class="config-section">
+            <div class="config-header" onclick="toggleConfig()">
+                <h3>⚙️ Configuración del Servidor</h3>
+                <button class="config-toggle" id="configToggle">▼</button>
+            </div>
+            <div class="config-content" id="configContent">
+                <div class="form-group">
+                    <label for="backendUrl">URL del Backend:</label>
+                    <input type="url" id="backendUrl" placeholder="http://localhost:5000" value="http://localhost:5000">
+                </div>
+                <div class="form-group">
+                    <label for="odooInstance">Instancia de Odoo:</label>
+                    <select id="odooInstance">
+                        <option value="production">Producción</option>
+                        <option value="staging">Pruebas</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="documentType">Tipo de Documento:</label>
+                    <select id="documentType">
+                        <option value="contacts">Contactos</option>
+                        <option value="invoices">Facturas</option>
+                        <option value="tasks">Tareas</option>
+                    </select>
+                </div>
+                <button class="btn btn-secondary" onclick="testConnection()">
+                    🔗 Probar Conexión
+                </button>
+                <div class="connection-status" id="connectionStatus">
+                    <div class="status-dot status-disconnected"></div>
+                    <span>Sin conexión</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Estado -->
+        <div id="statusContainer"></div>
+
+        <!-- Cámara -->
+        <div class="camera-container">
+            <video id="video" autoplay muted playsinline></video>
+            <canvas id="canvas"></canvas>
+            <div class="camera-overlay">
+                <div class="scan-frame scan-corners"></div>
+            </div>
+        </div>
+
+        <!-- Controles de Cámara -->
+        <div class="camera-controls">
+            <button class="btn btn-primary" id="cameraBtn" onclick="toggleCamera()">
+                📷 Iniciar Cámara
+            </button>
+            <button class="btn btn-secondary" id="flipBtn" onclick="flipCamera()" disabled>
+                🔄 Cambiar Cámara
+            </button>
+        </div>
+
+        <button class="btn btn-success" id="captureBtn" onclick="capturePhoto()" disabled>
+            📸 Capturar (Espacio)
+        </button>
+
+        <!-- Área de Texto -->
+        <div id="textSection" style="display: none;">
+            <label for="extractedText">Texto Extraído:</label>
+            <div class="confidence-bar">
+                <div class="confidence-fill" id="confidenceFill" style="width: 0%"></div>
+            </div>
+            <textarea id="extractedText" class="text-area" placeholder="Texto extraído aparecerá aquí..."></textarea>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <button class="btn btn-secondary" onclick="copyToClipboard()">
+                    📋 Copiar
+                </button>
+                <button class="btn btn-secondary" onclick="processAgain()">
+                    🔄 Procesar de Nuevo
+                </button>
+            </div>
+            
+            <button class="btn btn-success" onclick="sendToOdoo()">
+                📤 Enviar a Odoo (Ctrl+Enter)
+            </button>
+            
+            <button class="btn btn-primary" onclick="retakePhoto()">
+                🔄 Tomar Otra Foto
+            </button>
+        </div>
+
+        <!-- Atajos de Teclado -->
+        <div class="shortcuts">
+            <h4>⌨️ Atajos de Teclado:</h4>
+            <p><strong>Espacio:</strong> Capturar foto</p>
+            <p><strong>Ctrl + Enter:</strong> Enviar a Odoo</p>
+            <p><strong>Escape:</strong> Volver a tomar foto</p>
+        </div>
+    </div>
+
+    <!-- Efecto Flash -->
+    <div class="flash-effect" id="flashEffect"></div>
+
+    <script>
+        // Variables globales
+        let video, canvas, ctx;
+        let stream = null;
+        let currentCamera = 'environment';
+        let worker = null;
+        let capturedImageData = null;
+        
+        // Estadísticas de sesión
+        let stats = {
+            processed: 0,
+            sent: 0,
+            confidenceSum: 0
+        };
+
+        // Inicialización
+        document.addEventListener('DOMContentLoaded', function() {
+            video = document.getElementById('video');
+            canvas = document.getElementById('canvas');
+            ctx = canvas.getContext('2d');
+            
+            loadConfig();
+            initKeyboardShortcuts();
+        });
+
+        // Configuración
+        function loadConfig() {
+            const savedConfig = localStorage.getItem('ocrOdooConfig');
+            if (savedConfig) {
+                const config = JSON.parse(savedConfig);
+                document.getElementById('backendUrl').value = config.backendUrl || 'http://localhost:5000';
+                document.getElementById('odooInstance').value = config.odooInstance || 'production';
+                document.getElementById('documentType').value = config.documentType || 'contacts';
+                
+                // Auto-conectar si hay configuración guardada
+                setTimeout(testConnection, 1000);
+            }
+        }
+
+        function saveConfig() {
+            const config = {
+                backendUrl: document.getElementById('backendUrl').value,
+                odooInstance: document.getElementById('odooInstance').value,
+                documentType: document.getElementById('documentType').value
+            };
+            localStorage.setItem('ocrOdooConfig', JSON.stringify(config));
+        }
+
+        function toggleConfig() {
+            const content = document.getElementById('configContent');
+            const toggle = document.getElementById('configToggle');
+            
+            if (content.classList.contains('show')) {
+                content.classList.remove('show');
+                toggle.textContent = '▼';
+            } else {
+                content.classList.add('show');
+                toggle.textContent = '▲';
+            }
+        }
+
+        // Conexión con Backend
+        async function testConnection() {
+            const backendUrl = document.getElementById('backendUrl').value;
+            const instance = document.getElementById('odooInstance').value;
+            
+            if (!backendUrl) {
+                showStatus('error', 'Por favor ingresa la URL del backend');
+                return;
+            }
+
+            updateConnectionStatus('testing', 'Probando conexión...');
+            saveConfig();
+
+            try {
+                const response = await fetch(`${backendUrl}/api/test-connection`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ instance })
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    updateConnectionStatus('connected', `Conectado a ${instance}`);
+                    showStatus('success', result.message);
+                } else {
+                    updateConnectionStatus('disconnected', 'Error de conexión');
+                    showStatus('error', result.message);
+                }
+            } catch (error) {
+                updateConnectionStatus('disconnected', 'Backend no disponible');
+                showStatus('error', `Error de conexión: ${error.message}`);
+            }
+        }
+
+        function updateConnectionStatus(status, message) {
+            const statusElement = document.getElementById('connectionStatus');
+            const dot = statusElement.querySelector('.status-dot');
+            const text = statusElement.querySelector('span');
+            
+            dot.className = `status-dot status-${status}`;
+            text.textContent = message;
+        }
+
+        // Gestión de Cámara
+        async function toggleCamera() {
+            const btn = document.getElementById('cameraBtn');
+            
+            if (stream) {
+                stopCamera();
+            } else {
+                try {
+                    await startCamera();
+                } catch (error) {
+                    showStatus('error', 'Error al acceder a la cámara: ' + error.message);
+                }
+            }
+        }
+
+        async function startCamera() {
+            try {
+                const constraints = {
+                    video: {
+                        facingMode: currentCamera,
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                };
+
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = stream;
+                
+                document.getElementById('cameraBtn').textContent = '⏹️ Detener Cámara';
+                document.getElementById('flipBtn').disabled = false;
+                document.getElementById('captureBtn').disabled = false;
+                
+                showStatus('info', 'Cámara iniciada. Posiciona el documento en el marco y presiona capturar.');
+                
+            } catch (error) {
+                throw new Error('No se pudo acceder a la cámara. Verifica los permisos.');
+            }
+        }
+
+        function stopCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+                video.srcObject = null;
+                
+                document.getElementById('cameraBtn').textContent = '📷 Iniciar Cámara';
+                document.getElementById('flipBtn').disabled = true;
+                document.getElementById('captureBtn').disabled = true;
+                
+                clearStatus();
+            }
+        }
+
+        async function flipCamera() {
+            currentCamera = currentCamera === 'environment' ? 'user' : 'environment';
+            
+            if (stream) {
+                stopCamera();
+                await startCamera();
+            }
+        }
+
+        // Captura y OCR
+        async function capturePhoto() {
+            if (!stream) return;
+
+            // Efecto flash
+            const flash = document.getElementById('flashEffect');
+            flash.style.opacity = '0.8';
+            setTimeout(() => flash.style.opacity = '0', 150);
+
+            // Capturar frame del video
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0);
+            
+            capturedImageData = canvas.toDataURL('image/jpeg', 0.8);
+            
+            // Mostrar área de texto y ocultar controles de cámara
+            document.querySelector('.camera-controls').style.display = 'none';
+            document.getElementById('captureBtn').style.display = 'none';
+            document.getElementById('textSection').style.display = 'block';
+            
+            // Procesar OCR
+            await processOCR();
+        }
+
+        async function processOCR() {
+            showStatus('info', 'Procesando texto con OCR...');
+            
+            try {
+                // Inicializar worker si no existe
+                if (!worker) {
+                    worker = await Tesseract.createWorker('spa', 1, {
+                        logger: m => {
+                            if (m.status === 'recognizing text') {
+                                const progress = Math.round(m.progress * 100);
+                                showStatus('info', `Procesando OCR: ${progress}%`);
+                            }
+                        }
+                    });
+                }
+
+                // Procesar imagen
+                const { data: { text, confidence } } = await worker.recognize(canvas, {
+                    tessedit_pageseg_mode: 1
+                });
+
+                // Mostrar resultados
+                document.getElementById('extractedText').value = text.trim();
+                updateConfidence(confidence);
+                
+                // Actualizar estadísticas
+                stats.processed++;
+                stats.confidenceSum += confidence;
+                updateStats();
+                
+                if (text.trim()) {
+                    showStatus('success', `Texto extraído exitosamente (${Math.round(confidence)}% confianza)`);
+                } else {
+                    showStatus('error', 'No se detectó texto en la imagen. Intenta con mejor iluminación.');
+                }
+                
+            } catch (error) {
+                showStatus('error', 'Error en OCR: ' + error.message);
+            }
+        }
+
+        async function processAgain() {
+            if (!capturedImageData) return;
+            await processOCR();
+        }
+
+        // Envío a Odoo
+        async function sendToOdoo() {
+            const text = document.getElementById('extractedText').value.trim();
+            const backendUrl = document.getElementById('backendUrl').value;
+            const instance = document.getElementById('odooInstance').value;
+            const documentType = document.getElementById('documentType').value;
+            
+            if (!text) {
+                showStatus('error', 'No hay texto para enviar.');
+                return;
+            }
+
+            if (!backendUrl) {
+                showStatus('error', 'Configura la URL del backend primero.');
+                return;
+            }
+
+            showStatus('info', 'Enviando datos a Odoo...');
+            
+            try {
+                const response = await fetch(`${backendUrl}/api/send-text`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: text,
+                        type: documentType,
+                        instance: instance
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    showStatus('success', `¡Enviado exitosamente! ID: ${result.record_id}`);
+                    stats.sent++;
+                    updateStats();
+                    
+                    // Limpiar para siguiente escaneo
+                    setTimeout(retakePhoto, 2000);
+                } else {
+                    showStatus('error', result.message);
+                }
+                
+            } catch (error) {
+                showStatus('error', `Error de conexión: ${error.message}`);
+            }
+        }
+
+        // Utilidades
+        function updateConfidence(confidence) {
+            const fill = document.getElementById('confidenceFill');
+            const percentage = Math.round(confidence);
+            fill.style.width = percentage + '%';
+        }
+
+        function updateStats() {
+            document.getElementById('docsProcessed').textContent = stats.processed;
+            document.getElementById('docsSent').textContent = stats.sent;
+            
+            const avgConfidence = stats.processed > 0 ? 
+                Math.round(stats.confidenceSum / stats.processed) : 0;
+            document.getElementById('avgConfidence').textContent = avgConfidence + '%';
+        }
+
+        function copyToClipboard() {
+            const text = document.getElementById('extractedText').value;
+            navigator.clipboard.writeText(text).then(() => {
+                showStatus('success', 'Texto copiado al portapapeles');
+            });
+        }
+
+        function retakePhoto() {
+            document.getElementById('textSection').style.display = 'none';
+            document.querySelector('.camera-controls').style.display = 'grid';
+            document.getElementById('captureBtn').style.display = 'block';
+            document.getElementById('extractedText').value = '';
+            updateConfidence(0);
+            clearStatus();
+        }
+
+        // Atajos de teclado
+        function initKeyboardShortcuts() {
+            document.addEventListener('keydown', function(e) {
+                // Espacio: Capturar
+                if (e.code === 'Space' && !e.target.matches('input, textarea')) {
+                    e.preventDefault();
+                    if (!document.getElementById('captureBtn').disabled) {
+                        capturePhoto();
+                    }
+                }
+                
+                // Ctrl + Enter: Enviar a Odoo
+                if (e.ctrlKey && e.key === 'Enter') {
+                    e.preventDefault();
+                    sendToOdoo();
+                }
+                
+                // Escape: Volver a tomar foto
+                if (e.key === 'Escape') {
+                    retakePhoto();
+                }
+            });
+        }
+
+        // Sistema de notificaciones
+        function showStatus(type, message) {
+            const container = document.getElementById('statusContainer');
+            container.innerHTML = `
+                <div class="status status-${type}">
+                    ${message}
+                </div>
+            `;
+            
+            if (type === 'success') {
+                setTimeout(clearStatus, 3000);
+            }
+        }
+
+        function clearStatus() {
+            document.getElementById('statusContainer').innerHTML = '';
+        }
+
+        // Limpiar recursos al cerrar
+        window.addEventListener('beforeunload', function() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            if (worker) {
+                worker.terminate();
+            }
+        });
+    </script>
+</body>
+</html>
