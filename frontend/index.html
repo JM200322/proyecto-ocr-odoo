@@ -5,6 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Herramienta OCR para Odoo</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js"></script>
+    <script>
+        // Fallback para Tesseract.js si el CDN principal falla
+        if (typeof Tesseract === 'undefined') {
+            const fallbackScript = document.createElement('script');
+            fallbackScript.src = 'https://unpkg.com/tesseract.js@4.1.1/dist/tesseract.min.js';
+            fallbackScript.onload = function() {
+                console.log('Tesseract.js cargado desde fallback CDN');
+            };
+            fallbackScript.onerror = function() {
+                console.error('Error al cargar Tesseract.js desde ambos CDNs');
+            };
+            document.head.appendChild(fallbackScript);
+        }
+    </script>
     <style>
         * {
             margin: 0;
@@ -475,6 +489,10 @@
         <button class="btn btn-success" id="captureBtn" onclick="capturePhoto()" disabled>
             📸 Capturar (Espacio)
         </button>
+        
+        <button class="btn btn-secondary" onclick="testOCR()" style="margin-top: 10px;">
+            🧪 Probar OCR
+        </button>
 
         <!-- Área de Texto -->
         <div id="textSection" style="display: none;">
@@ -508,6 +526,7 @@
             <p><strong>Espacio:</strong> Capturar foto</p>
             <p><strong>Ctrl + Enter:</strong> Enviar a Odoo</p>
             <p><strong>Escape:</strong> Volver a tomar foto</p>
+            <p><strong>Ctrl + D:</strong> Modo debug</p>
         </div>
 
         <!-- Ayuda para problemas de cámara -->
@@ -531,6 +550,7 @@
         let currentCamera = 'environment';
         let worker = null;
         let capturedImageData = null;
+        let debugMode = false; // Para mostrar información de debug
         
         // Estadísticas de sesión
         let stats = {
@@ -548,9 +568,22 @@
             // Verificar si estamos en localhost
             checkLocalhost();
             
+            // Verificar que Tesseract esté cargado
+            checkTesseractLoaded();
+            
             loadConfig();
             initKeyboardShortcuts();
         });
+
+        function checkTesseractLoaded() {
+            setTimeout(() => {
+                if (typeof Tesseract === 'undefined') {
+                    showStatus('error', '⚠️ Tesseract.js no se cargó correctamente. Verifica tu conexión a internet y recarga la página.');
+                } else {
+                    console.log('Tesseract.js cargado correctamente');
+                }
+            }, 2000); // Dar tiempo para que se cargue
+        }
 
         function checkLocalhost() {
             const isLocalhost = window.location.hostname === 'localhost' || 
@@ -763,10 +796,29 @@
             flash.style.opacity = '0.8';
             setTimeout(() => flash.style.opacity = '0', 150);
 
+            // Verificar que el video tenga dimensiones válidas
+            if (video.videoWidth === 0 || video.videoHeight === 0) {
+                showStatus('error', 'El video no está listo. Espera un momento y vuelve a intentar.');
+                return;
+            }
+
             // Capturar frame del video
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             ctx.drawImage(video, 0, 0);
+            
+            // Verificar que se haya dibujado algo en el canvas
+            try {
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const hasData = imageData.data.some(pixel => pixel !== 0);
+                
+                if (!hasData) {
+                    showStatus('error', 'No se pudo capturar la imagen. Intenta de nuevo.');
+                    return;
+                }
+            } catch (error) {
+                console.error('Error al verificar datos del canvas:', error);
+            }
             
             capturedImageData = canvas.toDataURL('image/jpeg', 0.8);
             
@@ -781,24 +833,50 @@
 
         async function processOCR() {
             showStatus('info', 'Procesando texto con OCR...');
+            debugInfo('Iniciando procesamiento OCR');
             
             try {
+                // Verificar que Tesseract esté disponible
+                if (typeof Tesseract === 'undefined') {
+                    debugInfo('Tesseract no está definido');
+                    throw new Error('Tesseract.js no está cargado. Verifica tu conexión a internet.');
+                }
+
+                debugInfo('Tesseract disponible');
+
+                // Verificar que el canvas tenga datos válidos
+                if (!canvas || canvas.width === 0 || canvas.height === 0) {
+                    debugInfo(`Canvas inválido: width=${canvas?.width}, height=${canvas?.height}`);
+                    throw new Error('No hay imagen válida para procesar. Intenta capturar de nuevo.');
+                }
+
+                debugInfo(`Canvas válido: ${canvas.width}x${canvas.height}`);
+
                 // Inicializar worker si no existe
                 if (!worker) {
-                    worker = await Tesseract.createWorker('spa', 1, {
-                        logger: m => {
-                            if (m.status === 'recognizing text') {
-                                const progress = Math.round(m.progress * 100);
-                                showStatus('info', `Procesando OCR: ${progress}%`);
+                    try {
+                        showStatus('info', 'Inicializando OCR...');
+                        worker = await Tesseract.createWorker('spa', 1, {
+                            logger: m => {
+                                if (m.status === 'recognizing text') {
+                                    const progress = Math.round(m.progress * 100);
+                                    showStatus('info', `Procesando OCR: ${progress}%`);
+                                }
                             }
-                        }
-                    });
+                        });
+                        showStatus('info', 'OCR inicializado, procesando imagen...');
+                    } catch (workerError) {
+                        throw new Error(`Error al inicializar OCR: ${workerError.message}. Intenta recargar la página.`);
+                    }
                 }
 
                 // Procesar imagen
-                const { data: { text, confidence } } = await worker.recognize(canvas, {
+                const result = await worker.recognize(canvas, {
                     tessedit_pageseg_mode: 1
                 });
+
+                const text = result.data.text;
+                const confidence = result.data.confidence;
 
                 // Mostrar resultados
                 document.getElementById('extractedText').value = text.trim();
@@ -816,12 +894,34 @@
                 }
                 
             } catch (error) {
-                showStatus('error', 'Error en OCR: ' + error.message);
+                console.error('Error detallado en OCR:', error);
+                showStatus('error', 'Error en OCR: ' + (error.message || 'Error desconocido'));
+                
+                // Intentar reinicializar el worker en caso de error
+                if (worker) {
+                    try {
+                        await worker.terminate();
+                        worker = null;
+                    } catch (terminateError) {
+                        console.error('Error al terminar worker:', terminateError);
+                    }
+                }
             }
         }
 
         async function processAgain() {
             if (!capturedImageData) return;
+            
+            // Reinicializar worker para un nuevo intento
+            if (worker) {
+                try {
+                    await worker.terminate();
+                    worker = null;
+                } catch (error) {
+                    console.error('Error al terminar worker anterior:', error);
+                }
+            }
+            
             await processOCR();
         }
 
@@ -922,6 +1022,12 @@
                     sendToOdoo();
                 }
                 
+                // Ctrl + D: Modo debug
+                if (e.ctrlKey && e.key === 'd') {
+                    e.preventDefault();
+                    toggleDebugMode();
+                }
+                
                 // Escape: Volver a tomar foto
                 if (e.key === 'Escape') {
                     retakePhoto();
@@ -945,6 +1051,61 @@
 
         function clearStatus() {
             document.getElementById('statusContainer').innerHTML = '';
+        }
+
+        function debugInfo(message) {
+            if (debugMode) {
+                console.log('[DEBUG]', message);
+            }
+        }
+
+        function toggleDebugMode() {
+            debugMode = !debugMode;
+            console.log('Modo debug:', debugMode ? 'activado' : 'desactivado');
+            if (debugMode) {
+                showStatus('info', 'Modo debug activado - Revisa la consola para más información');
+            }
+        }
+
+        async function testOCR() {
+            showStatus('info', 'Probando OCR...');
+            debugInfo('Iniciando prueba de OCR');
+            
+            try {
+                // Verificar Tesseract
+                if (typeof Tesseract === 'undefined') {
+                    throw new Error('Tesseract.js no está disponible');
+                }
+                
+                debugInfo('Tesseract disponible para prueba');
+                
+                // Crear una imagen de prueba simple
+                const testCanvas = document.createElement('canvas');
+                testCanvas.width = 200;
+                testCanvas.height = 50;
+                const testCtx = testCanvas.getContext('2d');
+                
+                // Dibujar texto de prueba
+                testCtx.fillStyle = 'white';
+                testCtx.fillRect(0, 0, 200, 50);
+                testCtx.fillStyle = 'black';
+                testCtx.font = '20px Arial';
+                testCtx.fillText('TEST OCR', 10, 30);
+                
+                debugInfo('Imagen de prueba creada');
+                
+                // Probar OCR
+                const testWorker = await Tesseract.createWorker('eng', 1);
+                const result = await testWorker.recognize(testCanvas);
+                await testWorker.terminate();
+                
+                debugInfo('OCR de prueba completado');
+                showStatus('success', `OCR funcionando correctamente. Texto detectado: "${result.data.text.trim()}"`);
+                
+            } catch (error) {
+                debugInfo(`Error en prueba OCR: ${error.message}`);
+                showStatus('error', `Error en prueba OCR: ${error.message}`);
+            }
         }
 
         // Limpiar recursos al cerrar
