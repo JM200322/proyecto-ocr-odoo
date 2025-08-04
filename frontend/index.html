@@ -1065,6 +1065,139 @@
                 
                 ctx.putImageData(imageData, 0, 0);
             }
+            
+                        // Inicializar la vista con la imagen capturada
+            updateImageAdjustments();
+            
+            showStatus('info', 'Imagen capturada. Ajusta los parámetros y haz clic en "Aplicar y Procesar".');
+        }
+
+        // Función para aplicar ajustes y continuar con el OCR
+        window.applyAdjustments = async function() {
+            // Remover controles de ajuste
+            const controls = document.querySelector('.adjustment-controls');
+            if (controls) {
+                controls.remove();
+            }
+            
+            // Obtener parámetros de ajuste
+            const brightness = document.getElementById('brightness').value;
+            const contrast = document.getElementById('contrast').value;
+            const sharpness = document.getElementById('sharpness').value;
+            
+            // Convertir canvas a base64
+            const imageData = canvas.toDataURL('image/jpeg', 0.95);
+            
+            debugInfo('Enviando imagen al backend para procesamiento OCR');
+            
+            // Mostrar área de texto
+            document.getElementById('textSection').style.display = 'block';
+            
+            // Procesar OCR en el backend
+            await processOCRBackend(imageData, brightness, contrast, sharpness);
+        };
+
+        // Función para aplicar nitidez
+        function applySharpness(canvas, amount) {
+            const ctx = canvas.getContext('2d');
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            for (let y = 1; y < height - 1; y++) {
+                for (let x = 1; x < width - 1; x++) {
+                    const idx = (y * width + x) * 4;
+                    for (let c = 0; c < 3; c++) {
+                        const current = data[idx + c];
+                        const neighbors = [
+                            data[idx - width * 4 + c],  // arriba
+                            data[idx + width * 4 + c],  // abajo
+                            data[idx - 4 + c],          // izquierda
+                            data[idx + 4 + c]           // derecha
+                        ];
+                        
+                        const diff = current - (neighbors.reduce((a, b) => a + b) / 4);
+                        data[idx + c] = Math.min(255, Math.max(0, current + diff * amount));
+                    }
+                }
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        // Función para procesar OCR en el backend
+        async function processOCRBackend(imageData, brightness, contrast, sharpness) {
+            showStatus('info', 'Procesando texto con OCR en el servidor...');
+            debugInfo('Iniciando procesamiento OCR en backend');
+            
+            try {
+                const backendUrl = document.getElementById('backendUrl').value;
+                if (!backendUrl) {
+                    throw new Error('URL del backend no configurada');
+                }
+
+                // Enviar imagen al backend
+                const response = await fetch(`${backendUrl}/api/process-ocr`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        image_data: imageData,
+                        brightness: parseInt(brightness),
+                        contrast: parseInt(contrast),
+                        sharpness: parseInt(sharpness)
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Error del servidor: ${response.status}`);
+                }
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    // Mostrar resultados
+                    document.getElementById('extractedText').value = result.text;
+                    updateConfidence(result.confidence);
+                    
+                    // Actualizar estadísticas
+                    stats.processed++;
+                    stats.confidenceSum += result.confidence;
+                    updateStats();
+                    
+                    showStatus('success', `Texto extraído exitosamente (${Math.round(result.confidence)}% confianza, ${result.processing_time.toFixed(2)}s)`);
+                    
+                    // Log de éxito
+                    sendLogToBackend('INFO', 'OCR completado exitosamente en backend', {
+                        textLength: result.text.length,
+                        confidence: result.confidence,
+                        processingTime: result.processing_time,
+                        textPreview: result.text.substring(0, 100) + (result.text.length > 100 ? '...' : '')
+                    });
+                } else {
+                    throw new Error(result.message || 'Error desconocido en el procesamiento OCR');
+                }
+                
+            } catch (error) {
+                console.error('Error en OCR backend:', error);
+                debugInfo(`Error completo: ${error.toString()}`);
+                
+                let errorMessage = 'Error desconocido en OCR';
+                if (error.message) {
+                    errorMessage = error.message;
+                }
+                
+                showStatus('error', 'Error en OCR: ' + errorMessage);
+                
+                // Log detallado del error
+                sendLogToBackend('ERROR', 'Error en procesamiento OCR backend', {
+                    errorName: error.name,
+                    errorMessage: error.message,
+                    errorString: error.toString()
+                });
+            }
         }
 
         async function processOCR() {

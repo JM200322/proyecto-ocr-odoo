@@ -2,6 +2,20 @@
 
 Herramienta para escanear documentos con OCR y enviar el texto extraído a Odoo.
 
+## 🆕 Nuevas Características (v2.0)
+
+### OCR en Backend
+- **Procesamiento OCR en el servidor** para mayor precisión
+- **Tesseract nativo** en lugar de Tesseract.js
+- **Ajustes de imagen en tiempo real** (brillo, contraste, nitidez)
+- **Mejor rendimiento** y confiabilidad
+
+### Mejoras en la Interfaz
+- **Controles de ajuste de imagen** antes del OCR
+- **Vista previa en tiempo real** de los ajustes
+- **Procesamiento más preciso** con parámetros optimizables
+- **Mejor experiencia de usuario** con feedback visual
+
 ## 🚨 Problemas Identificados y Solucionados
 
 ### 1. **Error en OCR: "Error desconocido"**
@@ -40,13 +54,30 @@ Herramienta para escanear documentos con OCR y enviar el texto extraído a Odoo.
 
 ### Requisitos
 - Python 3.7+
+- Tesseract OCR
 - Navegador moderno (Chrome, Firefox, Safari)
 - Odoo instalado y funcionando
 
-### Backend
+### Instalación Automática
+```bash
+cd backend
+python install_dependencies.py
+```
+
+### Instalación Manual
 ```bash
 cd backend
 pip install -r requirements.txt
+
+# Instalar Tesseract OCR:
+# Windows: https://github.com/UB-Mannheim/tesseract/wiki
+# macOS: brew install tesseract
+# Linux: sudo apt-get install tesseract-ocr tesseract-ocr-spa
+```
+
+### Ejecutar
+```bash
+cd backend
 python app.py
 ```
 
@@ -80,9 +111,10 @@ El backend se ejecuta en `http://localhost:5000` por defecto.
 
 ### OCR
 - Captura de imágenes con cámara
-- Procesamiento OCR con Tesseract.js
+- **Procesamiento OCR en el servidor** con Tesseract nativo
+- **Ajustes de imagen en tiempo real** (brillo, contraste, nitidez)
 - Múltiples idiomas (español, inglés)
-- Fallback automático si un idioma falla
+- **Mayor precisión** y confiabilidad
 
 ### Debugging
 - Modo debug activable con Ctrl+D
@@ -100,8 +132,10 @@ El backend se ejecuta en `http://localhost:5000` por defecto.
 
 1. **Iniciar cámara:** Haz clic en "📷 Iniciar Cámara"
 2. **Capturar documento:** Presiona Espacio o haz clic en "📸 Capturar"
-3. **Revisar texto:** El texto extraído aparecerá en el área de texto
-4. **Enviar a Odoo:** Haz clic en "📤 Enviar a Odoo" o presiona Ctrl+Enter
+3. **Ajustar imagen:** Usa los controles de brillo, contraste y nitidez
+4. **Procesar OCR:** Haz clic en "Aplicar y Procesar"
+5. **Revisar texto:** El texto extraído aparecerá en el área de texto
+6. **Enviar a Odoo:** Haz clic en "📤 Enviar a Odoo" o presiona Ctrl+Enter
 
 ## ⌨️ Atajos de Teclado
 

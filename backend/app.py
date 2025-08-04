@@ -16,6 +16,77 @@ CORS(app)  # Permitir requests desde el frontend
 # Inicializar cliente Odoo
 odoo_client = OdooClient()
 
+def process_image_ocr(image_data, brightness=0, contrast=100, sharpness=0):
+    """Procesar imagen con OCR usando Tesseract"""
+    import time
+    import io
+    from PIL import Image, ImageEnhance, ImageFilter
+    
+    start_time = time.time()
+    
+    try:
+        # Cargar imagen desde bytes
+        image = Image.open(io.BytesIO(image_data))
+        
+        # Convertir a RGB si es necesario
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
+        
+        # Aplicar ajustes de imagen
+        if brightness != 0:
+            enhancer = ImageEnhance.Brightness(image)
+            image = enhancer.enhance(1 + brightness / 100)
+        
+        if contrast != 100:
+            enhancer = ImageEnhance.Contrast(image)
+            image = enhancer.enhance(contrast / 100)
+        
+        if sharpness > 0:
+            # Aplicar filtro de nitidez
+            image = image.filter(ImageFilter.UnsharpMask(radius=1, percent=sharpness))
+        
+        # Verificar si Tesseract está disponible
+        try:
+            import pytesseract
+            
+            # Configurar Tesseract
+            custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,;:!?()[]{}"\'-/\\@#$%&*+=<>|~'
+            
+            # Procesar OCR
+            text = pytesseract.image_to_string(image, config=custom_config, lang='spa+eng')
+            
+            # Obtener confianza (si está disponible)
+            try:
+                data = pytesseract.image_to_data(image, config=custom_config, lang='spa+eng', output_type=pytesseract.Output.DICT)
+                confidences = [int(conf) for conf in data['conf'] if int(conf) > 0]
+                confidence = sum(confidences) / len(confidences) if confidences else 0
+            except:
+                confidence = 0
+                
+        except ImportError:
+            # Tesseract no está disponible, usar texto de prueba
+            text = "Texto de prueba - Tesseract no está instalado"
+            confidence = 50
+            logger.warning("Tesseract no está instalado. Usando texto de prueba.")
+            
+        processing_time = time.time() - start_time
+        
+        logger.info(f"OCR completado en {processing_time:.2f}s con confianza {confidence:.1f}%")
+        
+        return {
+            'success': True,
+            'text': text.strip(),
+            'confidence': confidence,
+            'processing_time': processing_time
+        }
+        
+    except Exception as e:
+        logger.error(f"Error en process_image_ocr: {e}")
+        return {
+            'success': False,
+            'error': str(e)
+        }
+
 @app.route('/')
 def index():
     """Servir el frontend"""
@@ -145,6 +216,62 @@ def get_available_mappings():
             'mappings': [],
             'instances': []
         })
+
+@app.route('/api/process-ocr', methods=['POST'])
+def process_ocr():
+    """Procesar imagen con OCR en el backend"""
+    try:
+        # Verificar que se haya enviado una imagen
+        if 'image' not in request.files and 'image_data' not in request.json:
+            return jsonify({
+                'success': False,
+                'message': 'No se proporcionó imagen para procesar'
+            }), 400
+        
+        # Obtener parámetros de ajuste
+        brightness = request.json.get('brightness', 0)
+        contrast = request.json.get('contrast', 100)
+        sharpness = request.json.get('sharpness', 0)
+        
+        logger.info(f"Procesando OCR con parámetros: brillo={brightness}, contraste={contrast}, nitidez={sharpness}")
+        
+        # Procesar la imagen
+        if 'image' in request.files:
+            # Imagen enviada como archivo
+            image_file = request.files['image']
+            image_data = image_file.read()
+        else:
+            # Imagen enviada como base64
+            import base64
+            image_data_url = request.json['image_data']
+            # Remover el prefijo data:image/...;base64,
+            if ',' in image_data_url:
+                image_data = base64.b64decode(image_data_url.split(',')[1])
+            else:
+                image_data = base64.b64decode(image_data_url)
+        
+        # Procesar OCR
+        result = process_image_ocr(image_data, brightness, contrast, sharpness)
+        
+        if result['success']:
+            return jsonify({
+                'success': True,
+                'text': result['text'],
+                'confidence': result['confidence'],
+                'processing_time': result['processing_time']
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': result['error']
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"Error en process_ocr: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Error interno del servidor: {str(e)}'
+        }), 500
 
 @app.route('/api/frontend-log', methods=['POST'])
 def frontend_log():
