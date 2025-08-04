@@ -497,6 +497,10 @@
         <button class="btn btn-secondary" onclick="toggleDebugMode()" style="margin-top: 10px;">
             🐛 Modo Debug
         </button>
+        
+        <button class="btn btn-secondary" onclick="resetOCR()" style="margin-top: 10px;">
+            🔄 Reiniciar OCR
+        </button>
 
         <!-- Área de Texto -->
         <div id="textSection" style="display: none;">
@@ -579,12 +583,19 @@
             initKeyboardShortcuts();
         });
 
-        function checkTesseractLoaded() {
-            setTimeout(() => {
+        async function checkTesseractLoaded() {
+            setTimeout(async () => {
                 if (typeof Tesseract === 'undefined') {
-                    showStatus('error', '⚠️ Tesseract.js no se cargó correctamente. Verifica tu conexión a internet y recarga la página.');
+                    // Verificar conectividad de red
+                    const hasNetwork = await checkNetworkConnectivity();
+                    if (!hasNetwork) {
+                        showStatus('error', '⚠️ Sin conexión a internet. Tesseract.js requiere conexión para cargar.');
+                    } else {
+                        showStatus('error', '⚠️ Tesseract.js no se cargó correctamente. Verifica tu conexión a internet y recarga la página.');
+                    }
                 } else {
                     console.log('Tesseract.js cargado correctamente');
+                    debugInfo('Tesseract.js disponible para uso');
                 }
             }, 2000); // Dar tiempo para que se cargue
         }
@@ -650,24 +661,34 @@
             saveConfig();
 
             try {
-                const response = await fetch(`${backendUrl}/api/test-connection`, {
+                // Verificar que el backend esté disponible
+                const healthCheck = await fetch(`${backendUrl}/api/test-connection`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ instance })
+                    body: JSON.stringify({ instance }),
+                    timeout: 5000 // 5 segundos de timeout
                 });
 
-                const result = await response.json();
+                if (!healthCheck.ok) {
+                    throw new Error(`Backend respondió con código ${healthCheck.status}`);
+                }
+
+                const result = await healthCheck.json();
                 
                 if (result.success) {
                     updateConnectionStatus('connected', `Conectado a ${instance}`);
                     showStatus('success', result.message);
+                    debugInfo(`Conexión exitosa con backend: ${backendUrl}`);
                 } else {
                     updateConnectionStatus('disconnected', 'Error de conexión');
                     showStatus('error', result.message);
+                    debugInfo(`Error de conexión: ${result.message}`);
                 }
             } catch (error) {
                 updateConnectionStatus('disconnected', 'Backend no disponible');
-                showStatus('error', `Error de conexión: ${error.message}`);
+                const errorMsg = error.message || 'Error desconocido de conexión';
+                showStatus('error', `Error de conexión: ${errorMsg}`);
+                debugInfo(`Error de conexión con backend: ${errorMsg}`);
             }
         }
 
@@ -795,6 +816,13 @@
         async function capturePhoto() {
             if (!stream) return;
 
+            // Log de inicio de captura
+            sendLogToBackend('INFO', 'Iniciando captura de foto', {
+                videoReady: video.videoWidth > 0 && video.videoHeight > 0,
+                videoSize: `${video.videoWidth}x${video.videoHeight}`,
+                streamActive: stream.active
+            });
+
             // Efecto flash
             const flash = document.getElementById('flashEffect');
             flash.style.opacity = '0.8';
@@ -832,6 +860,12 @@
             capturedImageData = canvas.toDataURL('image/jpeg', 0.8);
             debugInfo('Imagen capturada y convertida a DataURL');
             
+            // Log de captura exitosa
+            sendLogToBackend('INFO', 'Captura de foto completada', {
+                canvasSize: `${canvas.width}x${canvas.height}`,
+                dataUrlLength: capturedImageData.length
+            });
+            
             // Mostrar área de texto y ocultar controles de cámara
             document.querySelector('.camera-controls').style.display = 'none';
             document.getElementById('captureBtn').style.display = 'none';
@@ -844,6 +878,15 @@
         async function processOCR() {
             showStatus('info', 'Procesando texto con OCR...');
             debugInfo('Iniciando procesamiento OCR');
+            
+            // Log detallado del estado inicial
+            sendLogToBackend('INFO', '=== INICIO PROCESAMIENTO OCR ===', {
+                tesseractAvailable: typeof Tesseract !== 'undefined',
+                canvasValid: canvas && canvas.width > 0 && canvas.height > 0,
+                canvasSize: canvas ? `${canvas.width}x${canvas.height}` : 'N/A',
+                workerActive: worker !== null,
+                debugMode: debugMode
+            });
             
             try {
                 // Verificar que Tesseract esté disponible
@@ -868,13 +911,14 @@
                         showStatus('info', 'Inicializando OCR...');
                         debugInfo('Creando worker de Tesseract...');
                         
-                        // Intentar primero con español, si falla usar inglés
+                        // Intentar diferentes configuraciones
                         let workerCreated = false;
                         let workerError = null;
                         
+                        // Opción 1: Sin idioma específico
                         try {
-                            debugInfo('Intentando crear worker con idioma español...');
-                            worker = await Tesseract.createWorker('spa', 1, {
+                            debugInfo('Intentando crear worker sin idioma específico...');
+                            worker = await Tesseract.createWorker({
                                 logger: m => {
                                     debugInfo(`Tesseract log: ${m.status} - ${m.progress || ''}`);
                                     if (m.status === 'recognizing text') {
@@ -883,13 +927,18 @@
                                     }
                                 }
                             });
+                            
+                            debugInfo('Worker creado sin idioma, cargando idioma español...');
+                            await worker.loadLanguage('spa');
+                            await worker.initialize('spa');
                             debugInfo('Worker creado exitosamente con español');
                             workerCreated = true;
+                            
                         } catch (spaError) {
                             debugInfo(`Error con español: ${spaError.message}`);
                             workerError = spaError;
                             
-                            // Intentar con inglés como fallback
+                            // Opción 2: Con idioma inglés desde el inicio
                             try {
                                 debugInfo('Intentando crear worker con idioma inglés...');
                                 worker = await Tesseract.createWorker('eng', 1, {
@@ -903,9 +952,25 @@
                                 });
                                 debugInfo('Worker creado exitosamente con inglés');
                                 workerCreated = true;
+                                
                             } catch (engError) {
                                 debugInfo(`Error con inglés: ${engError.message}`);
-                                throw new Error(`No se pudo crear worker con español ni inglés: ${spaError.message} / ${engError.message}`);
+                                
+                                // Opción 3: Worker básico sin idioma
+                                try {
+                                    debugInfo('Intentando crear worker básico...');
+                                    worker = await Tesseract.createWorker();
+                                    
+                                    debugInfo('Worker básico creado, cargando idioma inglés...');
+                                    await worker.loadLanguage('eng');
+                                    await worker.initialize('eng');
+                                    debugInfo('Worker básico creado exitosamente');
+                                    workerCreated = true;
+                                    
+                                } catch (basicError) {
+                                    debugInfo(`Error con worker básico: ${basicError.message}`);
+                                    throw new Error(`No se pudo crear worker: ${spaError.message} / ${engError.message} / ${basicError.message}`);
+                                }
                             }
                         }
                         
@@ -923,16 +988,30 @@
 
                 debugInfo('Iniciando reconocimiento de texto...');
 
-                // Procesar imagen
-                const result = await worker.recognize(canvas, {
-                    tessedit_pageseg_mode: 1
-                });
+                // Procesar imagen con manejo de errores mejorado
+                debugInfo('Iniciando reconocimiento de imagen...');
+                
+                let result;
+                try {
+                    result = await worker.recognize(canvas, {
+                        tessedit_pageseg_mode: 1
+                    });
+                    
+                    debugInfo('Reconocimiento completado');
+                    debugInfo(`Resultado: ${JSON.stringify(result)}`);
+                    
+                } catch (recognitionError) {
+                    debugInfo(`Error en reconocimiento: ${recognitionError.message}`);
+                    throw new Error(`Error en reconocimiento de texto: ${recognitionError.message}`);
+                }
 
-                debugInfo('Reconocimiento completado');
-                debugInfo(`Resultado: ${JSON.stringify(result)}`);
+                // Verificar que el resultado sea válido
+                if (!result || !result.data) {
+                    throw new Error('No se obtuvo resultado válido del OCR');
+                }
 
-                const text = result.data.text;
-                const confidence = result.data.confidence;
+                const text = result.data.text || '';
+                const confidence = result.data.confidence || 0;
 
                 debugInfo(`Texto extraído: "${text}"`);
                 debugInfo(`Confianza: ${confidence}`);
@@ -948,8 +1027,20 @@
                 
                 if (text.trim()) {
                     showStatus('success', `Texto extraído exitosamente (${Math.round(confidence)}% confianza)`);
+                    
+                    // Log de éxito
+                    sendLogToBackend('INFO', 'OCR completado exitosamente', {
+                        textLength: text.length,
+                        confidence: confidence,
+                        textPreview: text.substring(0, 100) + (text.length > 100 ? '...' : '')
+                    });
                 } else {
                     showStatus('error', 'No se detectó texto en la imagen. Intenta con mejor iluminación.');
+                    
+                    // Log de error por texto vacío
+                    sendLogToBackend('WARN', 'OCR completado pero no se detectó texto', {
+                        confidence: confidence
+                    });
                 }
                 
             } catch (error) {
@@ -968,6 +1059,14 @@
                 }
                 
                 showStatus('error', 'Error en OCR: ' + errorMessage);
+                
+                // Log detallado del error
+                sendLogToBackend('ERROR', 'Error en procesamiento OCR', {
+                    errorName: error.name,
+                    errorMessage: error.message,
+                    errorStack: error.stack,
+                    errorString: error.toString()
+                });
                 
                 // Intentar reinicializar el worker en caso de error
                 if (worker) {
@@ -1119,6 +1218,11 @@
                 </div>
             `;
             
+            // Enviar log al backend
+            const logLevel = type === 'error' ? 'ERROR' : 
+                           type === 'warn' ? 'WARN' : 'INFO';
+            sendLogToBackend(logLevel, message);
+            
             if (type === 'success') {
                 setTimeout(clearStatus, 3000);
             }
@@ -1128,9 +1232,48 @@
             document.getElementById('statusContainer').innerHTML = '';
         }
 
+        // Función para enviar logs al backend
+        async function sendLogToBackend(level, message, data = {}) {
+            try {
+                const backendUrl = document.getElementById('backendUrl').value;
+                if (!backendUrl) return; // No enviar si no hay URL configurada
+                
+                await fetch(`${backendUrl}/api/frontend-log`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        level: level,
+                        message: message,
+                        timestamp: new Date().toISOString(),
+                        data: data
+                    })
+                });
+            } catch (error) {
+                // Silenciar errores de envío de logs para evitar loops infinitos
+                console.log('Error enviando log al backend:', error.message);
+            }
+        }
+
         function debugInfo(message) {
             if (debugMode) {
                 console.log('[DEBUG]', message);
+                // Enviar al backend también
+                sendLogToBackend('DEBUG', message);
+            }
+        }
+
+        async function checkNetworkConnectivity() {
+            try {
+                const response = await fetch('https://httpbin.org/get', { 
+                    method: 'GET',
+                    mode: 'no-cors'
+                });
+                return true;
+            } catch (error) {
+                debugInfo(`Error de conectividad: ${error.message}`);
+                return false;
             }
         }
 
@@ -1144,14 +1287,85 @@
                 // Mostrar información del estado actual
                 debugInfo('=== ESTADO ACTUAL ===');
                 debugInfo(`Tesseract disponible: ${typeof Tesseract !== 'undefined'}`);
+                if (typeof Tesseract !== 'undefined') {
+                    debugInfo(`Tesseract versión: ${Tesseract.version || 'No disponible'}`);
+                }
                 debugInfo(`Worker activo: ${worker !== null}`);
                 debugInfo(`Stream activo: ${stream !== null}`);
                 debugInfo(`Canvas: ${canvas?.width}x${canvas?.height}`);
                 debugInfo(`Video: ${video?.videoWidth}x${video?.videoHeight}`);
                 debugInfo(`Debug mode: ${debugMode}`);
                 debugInfo('===================');
+                
+                // Verificar capacidades de Tesseract
+                checkTesseractCapabilities();
             } else {
                 showStatus('info', 'Modo debug desactivado');
+            }
+        }
+
+        async function checkTesseractCapabilities() {
+            if (typeof Tesseract === 'undefined') {
+                debugInfo('Tesseract no está disponible para verificar capacidades');
+                return;
+            }
+            
+            try {
+                debugInfo('=== VERIFICANDO CAPACIDADES DE TESSERACT ===');
+                
+                // Crear un worker temporal para verificar
+                const tempWorker = await Tesseract.createWorker();
+                debugInfo('Worker temporal creado exitosamente');
+                
+                // Verificar idiomas disponibles
+                try {
+                    const langs = await tempWorker.getLanguages();
+                    debugInfo(`Idiomas disponibles: ${JSON.stringify(langs)}`);
+                } catch (langError) {
+                    debugInfo(`Error al obtener idiomas: ${langError.message}`);
+                }
+                
+                await tempWorker.terminate();
+                debugInfo('Worker temporal terminado');
+                debugInfo('=== FIN VERIFICACIÓN ===');
+                
+            } catch (error) {
+                debugInfo(`Error al verificar capacidades: ${error.message}`);
+            }
+        }
+
+        async function resetOCR() {
+            showStatus('info', 'Reiniciando OCR...');
+            debugInfo('Iniciando reinicio de OCR');
+            
+            try {
+                // Terminar worker actual si existe
+                if (worker) {
+                    debugInfo('Terminando worker actual...');
+                    await worker.terminate();
+                    worker = null;
+                    debugInfo('Worker actual terminado');
+                }
+                
+                // Limpiar variables
+                capturedImageData = null;
+                
+                // Limpiar área de texto
+                document.getElementById('extractedText').value = '';
+                updateConfidence(0);
+                
+                // Mostrar controles de cámara
+                document.getElementById('textSection').style.display = 'none';
+                document.querySelector('.camera-controls').style.display = 'grid';
+                document.getElementById('captureBtn').style.display = 'block';
+                
+                showStatus('success', 'OCR reiniciado correctamente');
+                debugInfo('OCR reiniciado exitosamente');
+                
+            } catch (error) {
+                console.error('Error al reiniciar OCR:', error);
+                debugInfo(`Error al reiniciar OCR: ${error.message}`);
+                showStatus('error', `Error al reiniciar OCR: ${error.message}`);
             }
         }
 
@@ -1183,27 +1397,91 @@
                 debugInfo('Imagen de prueba creada');
                 debugInfo(`Canvas de prueba: ${testCanvas.width}x${testCanvas.height}`);
                 
-                // Probar OCR
+                // Probar OCR con manejo de errores mejorado
                 debugInfo('Creando worker de prueba...');
-                const testWorker = await Tesseract.createWorker('eng', 1, {
-                    logger: m => {
-                        debugInfo(`Test worker log: ${m.status} - ${m.progress || ''}`);
+                
+                // Intentar diferentes configuraciones
+                let testWorker = null;
+                let result = null;
+                
+                // Opción 1: Sin idioma específico
+                try {
+                    debugInfo('Intentando crear worker sin idioma específico...');
+                    testWorker = await Tesseract.createWorker({
+                        logger: m => {
+                            debugInfo(`Test worker log: ${m.status} - ${m.progress || ''}`);
+                        }
+                    });
+                    
+                    debugInfo('Worker creado sin idioma, cargando idioma inglés...');
+                    await testWorker.loadLanguage('eng');
+                    await testWorker.initialize('eng');
+                    
+                    debugInfo('Worker inicializado, iniciando reconocimiento...');
+                    result = await testWorker.recognize(testCanvas);
+                    
+                } catch (error1) {
+                    debugInfo(`Error con worker sin idioma: ${error1.message}`);
+                    
+                    // Opción 2: Con idioma desde el inicio
+                    try {
+                        debugInfo('Intentando crear worker con idioma inglés desde el inicio...');
+                        testWorker = await Tesseract.createWorker('eng', 1, {
+                            logger: m => {
+                                debugInfo(`Test worker log (eng): ${m.status} - ${m.progress || ''}`);
+                            }
+                        });
+                        
+                        debugInfo('Worker creado con inglés, iniciando reconocimiento...');
+                        result = await testWorker.recognize(testCanvas);
+                        
+                    } catch (error2) {
+                        debugInfo(`Error con worker con inglés: ${error2.message}`);
+                        
+                        // Opción 3: Sin idioma y sin logger
+                        try {
+                            debugInfo('Intentando crear worker básico...');
+                            testWorker = await Tesseract.createWorker();
+                            
+                            debugInfo('Worker básico creado, cargando idioma...');
+                            await testWorker.loadLanguage('eng');
+                            await testWorker.initialize('eng');
+                            
+                            debugInfo('Worker básico inicializado, iniciando reconocimiento...');
+                            
+                            try {
+                                result = await testWorker.recognize(testCanvas);
+                                debugInfo('Reconocimiento de prueba completado');
+                            } catch (recognitionError) {
+                                debugInfo(`Error en reconocimiento de prueba: ${recognitionError.message}`);
+                                throw new Error(`Error en reconocimiento: ${recognitionError.message}`);
+                            }
+                            
+                        } catch (error3) {
+                            debugInfo(`Error con worker básico: ${error3.message}`);
+                            throw new Error(`No se pudo crear worker: ${error1.message} / ${error2.message} / ${error3.message}`);
+                        }
                     }
-                });
+                }
                 
-                debugInfo('Worker de prueba creado, iniciando reconocimiento...');
-                const result = await testWorker.recognize(testCanvas);
-                
-                debugInfo('Reconocimiento de prueba completado');
-                debugInfo(`Resultado de prueba: ${JSON.stringify(result)}`);
-                
-                await testWorker.terminate();
-                debugInfo('Worker de prueba terminado');
-                
-                const detectedText = result.data.text.trim();
-                debugInfo(`Texto detectado en prueba: "${detectedText}"`);
-                
-                showStatus('success', `OCR funcionando correctamente. Texto detectado: "${detectedText}"`);
+                if (testWorker && result) {
+                    debugInfo(`Resultado de prueba: ${JSON.stringify(result)}`);
+                    
+                    await testWorker.terminate();
+                    debugInfo('Worker de prueba terminado');
+                    
+                    // Verificar que el resultado sea válido
+                    if (!result.data || !result.data.text) {
+                        throw new Error('No se obtuvo texto válido del OCR de prueba');
+                    }
+                    
+                    const detectedText = result.data.text.trim();
+                    debugInfo(`Texto detectado en prueba: "${detectedText}"`);
+                    
+                    showStatus('success', `OCR funcionando correctamente. Texto detectado: "${detectedText}"`);
+                } else {
+                    throw new Error('No se pudo completar el reconocimiento');
+                }
                 
             } catch (error) {
                 console.error('Error en prueba OCR:', error);

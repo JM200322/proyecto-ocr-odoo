@@ -144,6 +144,41 @@ def get_available_mappings():
             'instances': []
         })
 
+@app.route('/api/frontend-log', methods=['POST'])
+def frontend_log():
+    """Recibir logs del frontend y mostrarlos en la consola del backend"""
+    try:
+        data = request.json
+        log_level = data.get('level', 'INFO')
+        message = data.get('message', '')
+        timestamp = data.get('timestamp', '')
+        additional_data = data.get('data', {})
+        
+        # Formatear el mensaje de log
+        log_message = f"[FRONTEND-{log_level.upper()}] {message}"
+        if timestamp:
+            log_message = f"[{timestamp}] {log_message}"
+        
+        # Mostrar en consola según el nivel
+        if log_level.upper() == 'ERROR':
+            logger.error(log_message)
+        elif log_level.upper() == 'WARN':
+            logger.warning(log_message)
+        elif log_level.upper() == 'DEBUG':
+            logger.debug(log_message)
+        else:
+            logger.info(log_message)
+        
+        # Si hay datos adicionales, mostrarlos también
+        if additional_data:
+            logger.info(f"[FRONTEND-DATA] {additional_data}")
+        
+        return jsonify({'success': True, 'message': 'Log recibido'})
+        
+    except Exception as e:
+        logger.error(f"Error procesando log del frontend: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 if __name__ == '__main__':
     # Verificar que existe la configuración
     if not os.path.exists('../config/credentials.json'):
