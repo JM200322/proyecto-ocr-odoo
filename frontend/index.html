@@ -493,6 +493,10 @@
         <button class="btn btn-secondary" onclick="testOCR()" style="margin-top: 10px;">
             🧪 Probar OCR
         </button>
+        
+        <button class="btn btn-secondary" onclick="toggleDebugMode()" style="margin-top: 10px;">
+            🐛 Modo Debug
+        </button>
 
         <!-- Área de Texto -->
         <div id="textSection" style="display: none;">
@@ -802,6 +806,8 @@
                 return;
             }
 
+            debugInfo(`Capturando imagen: ${video.videoWidth}x${video.videoHeight}`);
+
             // Capturar frame del video
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
@@ -812,15 +818,19 @@
                 const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                 const hasData = imageData.data.some(pixel => pixel !== 0);
                 
+                debugInfo(`Datos de imagen: ${imageData.data.length} píxeles, tiene datos: ${hasData}`);
+                
                 if (!hasData) {
                     showStatus('error', 'No se pudo capturar la imagen. Intenta de nuevo.');
                     return;
                 }
             } catch (error) {
                 console.error('Error al verificar datos del canvas:', error);
+                debugInfo(`Error al verificar canvas: ${error.message}`);
             }
             
             capturedImageData = canvas.toDataURL('image/jpeg', 0.8);
+            debugInfo('Imagen capturada y convertida a DataURL');
             
             // Mostrar área de texto y ocultar controles de cámara
             document.querySelector('.camera-controls').style.display = 'none';
@@ -856,27 +866,76 @@
                 if (!worker) {
                     try {
                         showStatus('info', 'Inicializando OCR...');
-                        worker = await Tesseract.createWorker('spa', 1, {
-                            logger: m => {
-                                if (m.status === 'recognizing text') {
-                                    const progress = Math.round(m.progress * 100);
-                                    showStatus('info', `Procesando OCR: ${progress}%`);
+                        debugInfo('Creando worker de Tesseract...');
+                        
+                        // Intentar primero con español, si falla usar inglés
+                        let workerCreated = false;
+                        let workerError = null;
+                        
+                        try {
+                            debugInfo('Intentando crear worker con idioma español...');
+                            worker = await Tesseract.createWorker('spa', 1, {
+                                logger: m => {
+                                    debugInfo(`Tesseract log: ${m.status} - ${m.progress || ''}`);
+                                    if (m.status === 'recognizing text') {
+                                        const progress = Math.round(m.progress * 100);
+                                        showStatus('info', `Procesando OCR: ${progress}%`);
+                                    }
                                 }
+                            });
+                            debugInfo('Worker creado exitosamente con español');
+                            workerCreated = true;
+                        } catch (spaError) {
+                            debugInfo(`Error con español: ${spaError.message}`);
+                            workerError = spaError;
+                            
+                            // Intentar con inglés como fallback
+                            try {
+                                debugInfo('Intentando crear worker con idioma inglés...');
+                                worker = await Tesseract.createWorker('eng', 1, {
+                                    logger: m => {
+                                        debugInfo(`Tesseract log (eng): ${m.status} - ${m.progress || ''}`);
+                                        if (m.status === 'recognizing text') {
+                                            const progress = Math.round(m.progress * 100);
+                                            showStatus('info', `Procesando OCR: ${progress}%`);
+                                        }
+                                    }
+                                });
+                                debugInfo('Worker creado exitosamente con inglés');
+                                workerCreated = true;
+                            } catch (engError) {
+                                debugInfo(`Error con inglés: ${engError.message}`);
+                                throw new Error(`No se pudo crear worker con español ni inglés: ${spaError.message} / ${engError.message}`);
                             }
-                        });
+                        }
+                        
+                        if (!workerCreated) {
+                            throw workerError || new Error('Error desconocido al crear worker');
+                        }
+                        
                         showStatus('info', 'OCR inicializado, procesando imagen...');
                     } catch (workerError) {
+                        debugInfo(`Error al crear worker: ${workerError.message}`);
+                        debugInfo(`Stack trace: ${workerError.stack}`);
                         throw new Error(`Error al inicializar OCR: ${workerError.message}. Intenta recargar la página.`);
                     }
                 }
+
+                debugInfo('Iniciando reconocimiento de texto...');
 
                 // Procesar imagen
                 const result = await worker.recognize(canvas, {
                     tessedit_pageseg_mode: 1
                 });
 
+                debugInfo('Reconocimiento completado');
+                debugInfo(`Resultado: ${JSON.stringify(result)}`);
+
                 const text = result.data.text;
                 const confidence = result.data.confidence;
+
+                debugInfo(`Texto extraído: "${text}"`);
+                debugInfo(`Confianza: ${confidence}`);
 
                 // Mostrar resultados
                 document.getElementById('extractedText').value = text.trim();
@@ -895,15 +954,31 @@
                 
             } catch (error) {
                 console.error('Error detallado en OCR:', error);
-                showStatus('error', 'Error en OCR: ' + (error.message || 'Error desconocido'));
+                console.error('Stack trace:', error.stack);
+                debugInfo(`Error completo: ${error.toString()}`);
+                debugInfo(`Error name: ${error.name}`);
+                debugInfo(`Error message: ${error.message}`);
+                
+                let errorMessage = 'Error desconocido en OCR';
+                
+                if (error.message) {
+                    errorMessage = error.message;
+                } else if (error.name) {
+                    errorMessage = `Error ${error.name}: ${error.toString()}`;
+                }
+                
+                showStatus('error', 'Error en OCR: ' + errorMessage);
                 
                 // Intentar reinicializar el worker en caso de error
                 if (worker) {
                     try {
+                        debugInfo('Terminando worker debido a error...');
                         await worker.terminate();
                         worker = null;
+                        debugInfo('Worker terminado');
                     } catch (terminateError) {
                         console.error('Error al terminar worker:', terminateError);
+                        debugInfo(`Error al terminar worker: ${terminateError.message}`);
                     }
                 }
             }
@@ -1062,8 +1137,21 @@
         function toggleDebugMode() {
             debugMode = !debugMode;
             console.log('Modo debug:', debugMode ? 'activado' : 'desactivado');
+            
             if (debugMode) {
                 showStatus('info', 'Modo debug activado - Revisa la consola para más información');
+                
+                // Mostrar información del estado actual
+                debugInfo('=== ESTADO ACTUAL ===');
+                debugInfo(`Tesseract disponible: ${typeof Tesseract !== 'undefined'}`);
+                debugInfo(`Worker activo: ${worker !== null}`);
+                debugInfo(`Stream activo: ${stream !== null}`);
+                debugInfo(`Canvas: ${canvas?.width}x${canvas?.height}`);
+                debugInfo(`Video: ${video?.videoWidth}x${video?.videoHeight}`);
+                debugInfo(`Debug mode: ${debugMode}`);
+                debugInfo('===================');
+            } else {
+                showStatus('info', 'Modo debug desactivado');
             }
         }
 
@@ -1093,18 +1181,39 @@
                 testCtx.fillText('TEST OCR', 10, 30);
                 
                 debugInfo('Imagen de prueba creada');
+                debugInfo(`Canvas de prueba: ${testCanvas.width}x${testCanvas.height}`);
                 
                 // Probar OCR
-                const testWorker = await Tesseract.createWorker('eng', 1);
-                const result = await testWorker.recognize(testCanvas);
-                await testWorker.terminate();
+                debugInfo('Creando worker de prueba...');
+                const testWorker = await Tesseract.createWorker('eng', 1, {
+                    logger: m => {
+                        debugInfo(`Test worker log: ${m.status} - ${m.progress || ''}`);
+                    }
+                });
                 
-                debugInfo('OCR de prueba completado');
-                showStatus('success', `OCR funcionando correctamente. Texto detectado: "${result.data.text.trim()}"`);
+                debugInfo('Worker de prueba creado, iniciando reconocimiento...');
+                const result = await testWorker.recognize(testCanvas);
+                
+                debugInfo('Reconocimiento de prueba completado');
+                debugInfo(`Resultado de prueba: ${JSON.stringify(result)}`);
+                
+                await testWorker.terminate();
+                debugInfo('Worker de prueba terminado');
+                
+                const detectedText = result.data.text.trim();
+                debugInfo(`Texto detectado en prueba: "${detectedText}"`);
+                
+                showStatus('success', `OCR funcionando correctamente. Texto detectado: "${detectedText}"`);
                 
             } catch (error) {
-                debugInfo(`Error en prueba OCR: ${error.message}`);
-                showStatus('error', `Error en prueba OCR: ${error.message}`);
+                console.error('Error en prueba OCR:', error);
+                console.error('Stack trace:', error.stack);
+                debugInfo(`Error completo en prueba: ${error.toString()}`);
+                debugInfo(`Error name: ${error.name}`);
+                debugInfo(`Error message: ${error.message}`);
+                
+                let errorMessage = error.message || 'Error desconocido en prueba OCR';
+                showStatus('error', `Error en prueba OCR: ${errorMessage}`);
             }
         }
 
