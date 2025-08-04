@@ -509,6 +509,16 @@
             <p><strong>Ctrl + Enter:</strong> Enviar a Odoo</p>
             <p><strong>Escape:</strong> Volver a tomar foto</p>
         </div>
+
+        <!-- Ayuda para problemas de cámara -->
+        <div class="shortcuts" id="cameraHelp" style="display: none;">
+            <h4>🔧 Solución de Problemas de Cámara:</h4>
+            <p><strong>1.</strong> Asegúrate de estar usando HTTPS o localhost</p>
+            <p><strong>2.</strong> Haz clic en "Permitir" cuando el navegador te pregunte</p>
+            <p><strong>3.</strong> Verifica que no haya otras apps usando la cámara</p>
+            <p><strong>4.</strong> Usa Chrome, Firefox o Safari actualizado</p>
+            <p><strong>5.</strong> Si usas Windows, verifica los permisos de cámara en Configuración</p>
+        </div>
     </div>
 
     <!-- Efecto Flash -->
@@ -535,9 +545,23 @@
             canvas = document.getElementById('canvas');
             ctx = canvas.getContext('2d');
             
+            // Verificar si estamos en localhost
+            checkLocalhost();
+            
             loadConfig();
             initKeyboardShortcuts();
         });
+
+        function checkLocalhost() {
+            const isLocalhost = window.location.hostname === 'localhost' || 
+                               window.location.hostname === '127.0.0.1' ||
+                               window.location.hostname === '';
+            
+            if (!isLocalhost && window.location.protocol !== 'https:') {
+                showStatus('error', '⚠️ Para usar la cámara, accede desde localhost o usa HTTPS');
+                document.getElementById('cameraHelp').style.display = 'block';
+            }
+        }
 
         // Configuración
         function loadConfig() {
@@ -627,15 +651,43 @@
                 stopCamera();
             } else {
                 try {
+                    // Verificar permisos primero
+                    await checkCameraPermissions();
                     await startCamera();
                 } catch (error) {
                     showStatus('error', 'Error al acceder a la cámara: ' + error.message);
+                    // Mostrar ayuda para problemas de cámara
+                    document.getElementById('cameraHelp').style.display = 'block';
                 }
+            }
+        }
+
+        async function checkCameraPermissions() {
+            try {
+                // Verificar si ya tenemos permisos
+                const permissions = await navigator.permissions.query({ name: 'camera' });
+                
+                if (permissions.state === 'denied') {
+                    throw new Error('Permisos de cámara denegados. Ve a Configuración del navegador > Privacidad > Permisos de sitio y permite el acceso a la cámara.');
+                }
+                
+                if (permissions.state === 'prompt') {
+                    showStatus('info', 'El navegador te pedirá permisos para acceder a la cámara. Haz clic en "Permitir".');
+                }
+                
+            } catch (error) {
+                // Si no soporta permissions API, continuar normalmente
+                console.log('Permissions API no disponible, continuando...');
             }
         }
 
         async function startCamera() {
             try {
+                // Verificar si el navegador soporta getUserMedia
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('Tu navegador no soporta acceso a la cámara. Usa Chrome, Firefox o Safari.');
+                }
+
                 const constraints = {
                     video: {
                         facingMode: currentCamera,
@@ -651,10 +703,31 @@
                 document.getElementById('flipBtn').disabled = false;
                 document.getElementById('captureBtn').disabled = false;
                 
+                // Ocultar ayuda de cámara si estaba visible
+                document.getElementById('cameraHelp').style.display = 'none';
+                
                 showStatus('info', 'Cámara iniciada. Posiciona el documento en el marco y presiona capturar.');
                 
             } catch (error) {
-                throw new Error('No se pudo acceder a la cámara. Verifica los permisos.');
+                console.error('Error de cámara:', error);
+                
+                let errorMessage = 'Error al acceder a la cámara.';
+                
+                if (error.name === 'NotAllowedError') {
+                    errorMessage = 'Permiso denegado. Haz clic en "Permitir" cuando el navegador te pregunte por acceso a la cámara.';
+                } else if (error.name === 'NotFoundError') {
+                    errorMessage = 'No se encontró ninguna cámara en tu dispositivo.';
+                } else if (error.name === 'NotSupportedError') {
+                    errorMessage = 'Tu navegador no soporta acceso a la cámara. Usa Chrome, Firefox o Safari.';
+                } else if (error.name === 'NotReadableError') {
+                    errorMessage = 'La cámara está siendo usada por otra aplicación. Cierra otras apps que usen la cámara.';
+                } else if (error.name === 'OverconstrainedError') {
+                    errorMessage = 'No se pudo configurar la cámara con los parámetros solicitados.';
+                } else if (error.name === 'TypeError') {
+                    errorMessage = 'Error de configuración de la cámara.';
+                }
+                
+                throw new Error(errorMessage);
             }
         }
 
