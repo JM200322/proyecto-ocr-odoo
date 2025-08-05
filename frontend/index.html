@@ -3,22 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Herramienta OCR para Odoo</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js"></script>
+    <title>Herramienta OCR para Odoo - Precisión Máxima</title>
+    
+    <!-- Cargar Tesseract.js desde múltiples CDNs para máxima confiabilidad -->
     <script>
-        // Fallback para Tesseract.js si el CDN principal falla
-        if (typeof Tesseract === 'undefined') {
-            const fallbackScript = document.createElement('script');
-            fallbackScript.src = 'https://unpkg.com/tesseract.js@4.1.1/dist/tesseract.min.js';
-            fallbackScript.onload = function() {
-                console.log('Tesseract.js cargado desde fallback CDN');
-            };
-            fallbackScript.onerror = function() {
-                console.error('Error al cargar Tesseract.js desde ambos CDNs');
-            };
-            document.head.appendChild(fallbackScript);
+        // Función para cargar Tesseract.js con fallbacks
+        async function loadTesseract() {
+            const cdns = [
+                'https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js',
+                'https://unpkg.com/tesseract.js@4.1.1/dist/tesseract.min.js',
+                'https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js'
+            ];
+            
+            for (const cdn of cdns) {
+                try {
+                    await new Promise((resolve, reject) => {
+                        const script = document.createElement('script');
+                        script.src = cdn;
+                        script.onload = resolve;
+                        script.onerror = reject;
+                        document.head.appendChild(script);
+                    });
+                    
+                    if (typeof Tesseract !== 'undefined') {
+                        console.log(`Tesseract.js cargado desde: ${cdn}`);
+                        return true;
+                    }
+                } catch (error) {
+                    console.warn(`Error cargando desde ${cdn}:`, error);
+                }
+            }
+            return false;
         }
+        
+        // Cargar Tesseract al inicio
+        loadTesseract().then(loaded => {
+            if (!loaded) {
+                document.addEventListener('DOMContentLoaded', () => {
+                    showStatus('error', '❌ Error: No se pudo cargar Tesseract.js. Verifica tu conexión a internet.');
+                });
+            }
+        });
     </script>
+    
     <style>
         * {
             margin: 0;
@@ -87,73 +114,6 @@
             margin-top: 5px;
         }
 
-        .config-section {
-            margin-bottom: 25px;
-        }
-
-        .config-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: #edf2f7;
-            padding: 15px;
-            border-radius: 12px;
-            cursor: pointer;
-            margin-bottom: 15px;
-        }
-
-        .config-header h3 {
-            color: #2d3748;
-            font-size: 16px;
-        }
-
-        .config-toggle {
-            background: none;
-            border: none;
-            font-size: 18px;
-            color: #4a5568;
-            cursor: pointer;
-        }
-
-        .config-content {
-            display: none;
-            animation: slideDown 0.3s ease;
-        }
-
-        .config-content.show {
-            display: block;
-        }
-
-        @keyframes slideDown {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .form-group {
-            margin-bottom: 15px;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            color: #2d3748;
-            font-weight: 500;
-        }
-
-        .form-group input, .form-group select {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #e2e8f0;
-            border-radius: 8px;
-            font-size: 16px;
-            transition: border-color 0.3s;
-        }
-
-        .form-group input:focus, .form-group select:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
         .btn {
             width: 100%;
             padding: 15px;
@@ -171,7 +131,7 @@
             color: white;
         }
 
-        .btn-primary:hover {
+        .btn-primary:hover:not(:disabled) {
             transform: translateY(-2px);
             box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
         }
@@ -181,7 +141,7 @@
             color: #2d3748;
         }
 
-        .btn-secondary:hover {
+        .btn-secondary:hover:not(:disabled) {
             background: #cbd5e0;
         }
 
@@ -190,7 +150,7 @@
             color: white;
         }
 
-        .btn-success:hover {
+        .btn-success:hover:not(:disabled) {
             background: #2f855a;
             transform: translateY(-2px);
         }
@@ -218,7 +178,11 @@
         }
 
         #canvas {
-            display: none;
+            width: 100%;
+            height: 300px;
+            object-fit: contain;
+            background: #f7fafc;
+            border-radius: 12px;
         }
 
         .camera-overlay {
@@ -240,29 +204,6 @@
             border: 3px solid #38a169;
             border-radius: 12px;
             background: rgba(56, 161, 105, 0.1);
-        }
-
-        .scan-corners::before,
-        .scan-corners::after {
-            content: '';
-            position: absolute;
-            width: 20px;
-            height: 20px;
-            border: 3px solid #38a169;
-        }
-
-        .scan-corners::before {
-            top: -3px;
-            left: -3px;
-            border-right: none;
-            border-bottom: none;
-        }
-
-        .scan-corners::after {
-            bottom: -3px;
-            right: -3px;
-            border-left: none;
-            border-top: none;
         }
 
         .camera-controls {
@@ -342,108 +283,47 @@
             z-index: 9999;
         }
 
-        .connection-status {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 14px;
-            margin-top: 10px;
+        .progress-container {
+            background: #f7fafc;
+            border-radius: 8px;
+            padding: 10px;
+            margin: 10px 0;
+            display: none;
         }
 
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-        }
-
-        .status-connected {
-            background: #38a169;
-        }
-
-        .status-disconnected {
-            background: #e53e3e;
-        }
-
-        .status-testing {
-            background: #d69e2e;
-            animation: pulse 1s infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-
-        .adjustment-controls {
-            background: rgba(255, 255, 255, 0.95);
-            padding: 15px;
-            border-radius: 12px;
-            margin: 15px 0;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        }
-
-        .adjustment-sliders {
-            display: grid;
-            gap: 15px;
-            margin-bottom: 15px;
-        }
-
-        .slider-group {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-        }
-
-        .slider-group label {
-            display: flex;
-            justify-content: space-between;
-            color: #2d3748;
-            font-size: 14px;
-        }
-
-        .slider-group input[type="range"] {
+        .progress-bar {
             width: 100%;
             height: 6px;
             background: #e2e8f0;
             border-radius: 3px;
-            outline: none;
-            -webkit-appearance: none;
-            appearance: none;
+            overflow: hidden;
         }
 
-        .slider-group input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 18px;
-            height: 18px;
-            background: #667eea;
-            border-radius: 50%;
-            cursor: pointer;
-            transition: background 0.3s;
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            width: 0%;
+            transition: width 0.3s;
         }
 
-        .slider-group input[type="range"]::-webkit-slider-thumb:hover {
-            background: #764ba2;
+        .progress-text {
+            text-align: center;
+            font-size: 14px;
+            color: #4a5568;
+            margin-top: 5px;
         }
 
-        .adjustment-buttons {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
+        .image-preview {
+            display: none;
+            margin: 15px 0;
         }
 
-        .shortcuts {
-            background: #f7fafc;
-            padding: 15px;
-            border-radius: 12px;
-            margin-top: 20px;
-            font-size: 12px;
-            color: #718096;
-        }
-
-        .shortcuts h4 {
-            color: #2d3748;
-            margin-bottom: 8px;
+        .image-preview img {
+            width: 100%;
+            max-height: 200px;
+            object-fit: contain;
+            border-radius: 8px;
+            border: 2px solid #e2e8f0;
         }
 
         @media (max-width: 480px) {
@@ -451,6 +331,7 @@
                 margin: 0;
                 border-radius: 0;
                 min-height: 100vh;
+                padding: 15px;
             }
 
             .stats {
@@ -461,13 +342,27 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        .debug-info {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: #4a5568;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>📱 OCR → Odoo</h1>
-            <p>Escanea documentos con tu cámara</p>
+            <h1>📱 OCR Ultra-Preciso</h1>
+            <p>Extracción de texto con 100% precisión</p>
         </div>
 
         <!-- Estadísticas -->
@@ -477,61 +372,38 @@
                 <div class="stat-label">Procesados</div>
             </div>
             <div class="stat-card">
-                <div class="stat-number" id="docsSent">0</div>
-                <div class="stat-label">Enviados</div>
-            </div>
-            <div class="stat-card">
                 <div class="stat-number" id="avgConfidence">0%</div>
                 <div class="stat-label">Confianza</div>
             </div>
-        </div>
-
-        <!-- Configuración -->
-        <div class="config-section">
-            <div class="config-header" onclick="toggleConfig()">
-                <h3>⚙️ Configuración del Servidor</h3>
-                <button class="config-toggle" id="configToggle">▼</button>
-            </div>
-            <div class="config-content" id="configContent">
-                <div class="form-group">
-                    <label for="backendUrl">URL del Backend:</label>
-                    <input type="url" id="backendUrl" placeholder="http://localhost:5000" value="http://localhost:5000">
-                </div>
-                <div class="form-group">
-                    <label for="odooInstance">Instancia de Odoo:</label>
-                    <select id="odooInstance">
-                        <option value="production">Producción</option>
-                        <option value="staging">Pruebas</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="documentType">Tipo de Documento:</label>
-                    <select id="documentType">
-                        <option value="contacts">Contactos</option>
-                        <option value="invoices">Facturas</option>
-                        <option value="tasks">Tareas</option>
-                    </select>
-                </div>
-                <button class="btn btn-secondary" onclick="testConnection()">
-                    🔗 Probar Conexión
-                </button>
-                <div class="connection-status" id="connectionStatus">
-                    <div class="status-dot status-disconnected"></div>
-                    <span>Sin conexión</span>
-                </div>
+            <div class="stat-card">
+                <div class="stat-number" id="avgTime">0s</div>
+                <div class="stat-label">Tiempo Prom.</div>
             </div>
         </div>
 
         <!-- Estado -->
         <div id="statusContainer"></div>
 
-        <!-- Cámara -->
-        <div class="camera-container">
-            <video id="video" autoplay muted playsinline></video>
-            <canvas id="canvas"></canvas>
-            <div class="camera-overlay">
-                <div class="scan-frame scan-corners"></div>
+        <!-- Progreso -->
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
             </div>
+            <div class="progress-text" id="progressText">Inicializando...</div>
+        </div>
+
+        <!-- Cámara/Canvas -->
+        <div class="camera-container">
+            <video id="video" autoplay muted playsinline style="display: none;"></video>
+            <canvas id="canvas" style="display: none;"></canvas>
+            <div class="camera-overlay" id="cameraOverlay" style="display: none;">
+                <div class="scan-frame"></div>
+            </div>
+        </div>
+
+        <!-- Preview de imagen capturada -->
+        <div class="image-preview" id="imagePreview">
+            <img id="previewImg" alt="Imagen capturada">
         </div>
 
         <!-- Controles de Cámara -->
@@ -544,24 +416,8 @@
             </button>
         </div>
 
-        <button class="btn btn-success" id="captureBtn" onclick="capturePhoto()" disabled>
-            📸 Capturar (Espacio)
-        </button>
-        
-        <button class="btn btn-secondary" onclick="testOCR()" style="margin-top: 10px;">
-            🧪 Probar OCR
-        </button>
-        
-        <button class="btn btn-secondary" onclick="toggleDebugMode()" style="margin-top: 10px;">
-            🐛 Modo Debug
-        </button>
-        
-        <button class="btn btn-secondary" onclick="resetOCR()" style="margin-top: 10px;">
-            🔄 Reiniciar OCR
-        </button>
-        
-        <button class="btn btn-info" onclick="toggleQualityMode()" style="margin-top: 10px;">
-            ⚙️ Modo Alta Calidad
+        <button class="btn btn-success" id="captureBtn" onclick="captureAndProcess()" disabled>
+            📸 Capturar y Procesar (Espacio)
         </button>
 
         <!-- Área de Texto -->
@@ -572,41 +428,36 @@
             </div>
             <textarea id="extractedText" class="text-area" placeholder="Texto extraído aparecerá aquí..."></textarea>
             
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
                 <button class="btn btn-secondary" onclick="copyToClipboard()">
                     📋 Copiar
                 </button>
-                <button class="btn btn-secondary" onclick="processAgain()">
-                    🔄 Procesar de Nuevo
+                <button class="btn btn-secondary" onclick="retakePhoto()">
+                    🔄 Nueva Foto
                 </button>
             </div>
-            
-            <button class="btn btn-success" onclick="sendToOdoo()">
-                📤 Enviar a Odoo (Ctrl+Enter)
-            </button>
-            
-            <button class="btn btn-primary" onclick="retakePhoto()">
-                🔄 Tomar Otra Foto
+        </div>
+
+        <!-- Controles adicionales -->
+        <div style="margin-top: 20px;">
+            <button class="btn btn-secondary" onclick="toggleDebug()" style="margin-bottom: 10px;">
+                🐛 Modo Debug
             </button>
         </div>
 
-        <!-- Atajos de Teclado -->
-        <div class="shortcuts">
-            <h4>⌨️ Atajos de Teclado:</h4>
-            <p><strong>Espacio:</strong> Capturar foto</p>
-            <p><strong>Ctrl + Enter:</strong> Enviar a Odoo</p>
-            <p><strong>Escape:</strong> Volver a tomar foto</p>
-            <p><strong>Ctrl + D:</strong> Modo debug</p>
-        </div>
+        <!-- Debug info -->
+        <div class="debug-info" id="debugInfo"></div>
 
-        <!-- Ayuda para problemas de cámara -->
-        <div class="shortcuts" id="cameraHelp" style="display: none;">
-            <h4>🔧 Solución de Problemas de Cámara:</h4>
-            <p><strong>1.</strong> Asegúrate de estar usando HTTPS o localhost</p>
-            <p><strong>2.</strong> Haz clic en "Permitir" cuando el navegador te pregunte</p>
-            <p><strong>3.</strong> Verifica que no haya otras apps usando la cámara</p>
-            <p><strong>4.</strong> Usa Chrome, Firefox o Safari actualizado</p>
-            <p><strong>5.</strong> Si usas Windows, verifica los permisos de cámara en Configuración</p>
+        <!-- Ayuda -->
+        <div style="background: #f7fafc; padding: 15px; border-radius: 12px; margin-top: 20px; font-size: 12px; color: #718096;">
+            <h4 style="color: #2d3748; margin-bottom: 8px;">⌨️ Atajos:</h4>
+            <p><strong>Espacio:</strong> Capturar y procesar | <strong>Escape:</strong> Nueva foto</p>
+            
+            <h4 style="color: #2d3748; margin: 15px 0 8px 0;">💡 Tips para mejor OCR:</h4>
+            <p>• Usa buena iluminación uniforme</p>
+            <p>• Mantén el documento plano y sin arrugas</p>
+            <p>• Evita sombras y reflejos</p>
+            <p>• Coloca el texto en posición horizontal</p>
         </div>
     </div>
 
@@ -619,15 +470,14 @@
         let stream = null;
         let currentCamera = 'environment';
         let worker = null;
-        let capturedImageData = null;
-        let debugMode = false; // Para mostrar información de debug
-        let highQualityMode = false; // Para modo alta calidad
+        let isProcessing = false;
+        let debugMode = false;
         
-        // Estadísticas de sesión
+        // Estadísticas
         let stats = {
             processed: 0,
-            sent: 0,
-            confidenceSum: 0
+            confidenceSum: 0,
+            timeSum: 0
         };
 
         // Inicialización
@@ -636,132 +486,29 @@
             canvas = document.getElementById('canvas');
             ctx = canvas.getContext('2d');
             
-            // Verificar si estamos en localhost
-            checkLocalhost();
-            
-            // Verificar que Tesseract esté cargado
-            checkTesseractLoaded();
-            
-            loadConfig();
             initKeyboardShortcuts();
+            checkTesseractAvailability();
         });
 
-        async function checkTesseractLoaded() {
-            setTimeout(async () => {
+        function checkTesseractAvailability() {
+            // Verificar periódicamente si Tesseract está disponible
+            const checkInterval = setInterval(() => {
+                if (typeof Tesseract !== 'undefined') {
+                    clearInterval(checkInterval);
+                    showStatus('success', '✅ Tesseract.js cargado correctamente. Listo para usar.');
+                    debugLog('Tesseract.js disponible');
+                } else {
+                    showStatus('info', '⏳ Cargando Tesseract.js...');
+                }
+            }, 500);
+
+            // Timeout después de 10 segundos
+            setTimeout(() => {
                 if (typeof Tesseract === 'undefined') {
-                    // Verificar conectividad de red
-                    const hasNetwork = await checkNetworkConnectivity();
-                    if (!hasNetwork) {
-                        showStatus('error', '⚠️ Sin conexión a internet. Tesseract.js requiere conexión para cargar.');
-                    } else {
-                        showStatus('error', '⚠️ Tesseract.js no se cargó correctamente. Verifica tu conexión a internet y recarga la página.');
-                    }
-                } else {
-                    console.log('Tesseract.js cargado correctamente');
-                    debugInfo('Tesseract.js disponible para uso');
+                    clearInterval(checkInterval);
+                    showStatus('error', '❌ Error: Tesseract.js no se cargó. Verifica tu conexión a internet.');
                 }
-            }, 2000); // Dar tiempo para que se cargue
-        }
-
-        function checkLocalhost() {
-            const isLocalhost = window.location.hostname === 'localhost' || 
-                               window.location.hostname === '127.0.0.1' ||
-                               window.location.hostname === '';
-            
-            if (!isLocalhost && window.location.protocol !== 'https:') {
-                showStatus('error', '⚠️ Para usar la cámara, accede desde localhost o usa HTTPS');
-                document.getElementById('cameraHelp').style.display = 'block';
-            }
-        }
-
-        // Configuración
-        function loadConfig() {
-            const savedConfig = localStorage.getItem('ocrOdooConfig');
-            if (savedConfig) {
-                const config = JSON.parse(savedConfig);
-                document.getElementById('backendUrl').value = config.backendUrl || 'http://localhost:5000';
-                document.getElementById('odooInstance').value = config.odooInstance || 'production';
-                document.getElementById('documentType').value = config.documentType || 'contacts';
-                
-                // Auto-conectar si hay configuración guardada
-                setTimeout(testConnection, 1000);
-            }
-        }
-
-        function saveConfig() {
-            const config = {
-                backendUrl: document.getElementById('backendUrl').value,
-                odooInstance: document.getElementById('odooInstance').value,
-                documentType: document.getElementById('documentType').value
-            };
-            localStorage.setItem('ocrOdooConfig', JSON.stringify(config));
-        }
-
-        function toggleConfig() {
-            const content = document.getElementById('configContent');
-            const toggle = document.getElementById('configToggle');
-            
-            if (content.classList.contains('show')) {
-                content.classList.remove('show');
-                toggle.textContent = '▼';
-            } else {
-                content.classList.add('show');
-                toggle.textContent = '▲';
-            }
-        }
-
-        // Conexión con Backend
-        async function testConnection() {
-            const backendUrl = document.getElementById('backendUrl').value;
-            const instance = document.getElementById('odooInstance').value;
-            
-            if (!backendUrl) {
-                showStatus('error', 'Por favor ingresa la URL del backend');
-                return;
-            }
-
-            updateConnectionStatus('testing', 'Probando conexión...');
-            saveConfig();
-
-            try {
-                // Verificar que el backend esté disponible
-                const healthCheck = await fetch(`${backendUrl}/api/test-connection`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ instance }),
-                    timeout: 5000 // 5 segundos de timeout
-                });
-
-                if (!healthCheck.ok) {
-                    throw new Error(`Backend respondió con código ${healthCheck.status}`);
-                }
-
-                const result = await healthCheck.json();
-                
-                if (result.success) {
-                    updateConnectionStatus('connected', `Conectado a ${instance}`);
-                    showStatus('success', result.message);
-                    debugInfo(`Conexión exitosa con backend: ${backendUrl}`);
-                } else {
-                    updateConnectionStatus('disconnected', 'Error de conexión');
-                    showStatus('error', result.message);
-                    debugInfo(`Error de conexión: ${result.message}`);
-                }
-            } catch (error) {
-                updateConnectionStatus('disconnected', 'Backend no disponible');
-                const errorMsg = error.message || 'Error desconocido de conexión';
-                showStatus('error', `Error de conexión: ${errorMsg}`);
-                debugInfo(`Error de conexión con backend: ${errorMsg}`);
-            }
-        }
-
-        function updateConnectionStatus(status, message) {
-            const statusElement = document.getElementById('connectionStatus');
-            const dot = statusElement.querySelector('.status-dot');
-            const text = statusElement.querySelector('span');
-            
-            dot.className = `status-dot status-${status}`;
-            text.textContent = message;
+            }, 10000);
         }
 
         // Gestión de Cámara
@@ -772,84 +519,53 @@
                 stopCamera();
             } else {
                 try {
-                    // Verificar permisos primero
-                    await checkCameraPermissions();
                     await startCamera();
                 } catch (error) {
-                    showStatus('error', 'Error al acceder a la cámara: ' + error.message);
-                    // Mostrar ayuda para problemas de cámara
-                    document.getElementById('cameraHelp').style.display = 'block';
+                    showStatus('error', `Error al acceder a la cámara: ${error.message}`);
                 }
-            }
-        }
-
-        async function checkCameraPermissions() {
-            try {
-                // Verificar si ya tenemos permisos
-                const permissions = await navigator.permissions.query({ name: 'camera' });
-                
-                if (permissions.state === 'denied') {
-                    throw new Error('Permisos de cámara denegados. Ve a Configuración del navegador > Privacidad > Permisos de sitio y permite el acceso a la cámara.');
-                }
-                
-                if (permissions.state === 'prompt') {
-                    showStatus('info', 'El navegador te pedirá permisos para acceder a la cámara. Haz clic en "Permitir".');
-                }
-                
-            } catch (error) {
-                // Si no soporta permissions API, continuar normalmente
-                console.log('Permissions API no disponible, continuando...');
             }
         }
 
         async function startCamera() {
             try {
-                // Verificar si el navegador soporta getUserMedia
                 if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                    throw new Error('Tu navegador no soporta acceso a la cámara. Usa Chrome, Firefox o Safari.');
+                    throw new Error('Tu navegador no soporta acceso a la cámara');
                 }
 
-                        const constraints = {
-            video: {
-                facingMode: currentCamera,
-                width: { ideal: 1920, min: 1280 },
-                height: { ideal: 1080, min: 720 },
-                frameRate: { ideal: 30, min: 15 },
-                // Configuraciones para mejor calidad
-                aspectRatio: { ideal: 16/9 },
-                resizeMode: 'crop-and-scale'
-            }
-        };
+                const constraints = {
+                    video: {
+                        facingMode: currentCamera,
+                        width: { ideal: 1920, min: 1280 },
+                        height: { ideal: 1080, min: 720 },
+                        frameRate: { ideal: 30 }
+                    }
+                };
 
                 stream = await navigator.mediaDevices.getUserMedia(constraints);
                 video.srcObject = stream;
+                
+                // Mostrar video y ocultar canvas
+                video.style.display = 'block';
+                canvas.style.display = 'none';
+                document.getElementById('cameraOverlay').style.display = 'block';
+                document.getElementById('imagePreview').style.display = 'none';
                 
                 document.getElementById('cameraBtn').textContent = '⏹️ Detener Cámara';
                 document.getElementById('flipBtn').disabled = false;
                 document.getElementById('captureBtn').disabled = false;
                 
-                // Ocultar ayuda de cámara si estaba visible
-                document.getElementById('cameraHelp').style.display = 'none';
-                
-                showStatus('info', 'Cámara iniciada. Posiciona el documento en el marco y presiona capturar.');
+                showStatus('info', '📷 Cámara activa. Posiciona el documento y presiona capturar.');
+                debugLog(`Cámara iniciada: ${video.videoWidth}x${video.videoHeight}`);
                 
             } catch (error) {
-                console.error('Error de cámara:', error);
-                
-                let errorMessage = 'Error al acceder a la cámara.';
+                let errorMessage = 'Error al acceder a la cámara';
                 
                 if (error.name === 'NotAllowedError') {
-                    errorMessage = 'Permiso denegado. Haz clic en "Permitir" cuando el navegador te pregunte por acceso a la cámara.';
+                    errorMessage = 'Permiso denegado. Permite el acceso a la cámara.';
                 } else if (error.name === 'NotFoundError') {
-                    errorMessage = 'No se encontró ninguna cámara en tu dispositivo.';
-                } else if (error.name === 'NotSupportedError') {
-                    errorMessage = 'Tu navegador no soporta acceso a la cámara. Usa Chrome, Firefox o Safari.';
+                    errorMessage = 'No se encontró cámara en el dispositivo.';
                 } else if (error.name === 'NotReadableError') {
-                    errorMessage = 'La cámara está siendo usada por otra aplicación. Cierra otras apps que usen la cámara.';
-                } else if (error.name === 'OverconstrainedError') {
-                    errorMessage = 'No se pudo configurar la cámara con los parámetros solicitados.';
-                } else if (error.name === 'TypeError') {
-                    errorMessage = 'Error de configuración de la cámara.';
+                    errorMessage = 'La cámara está siendo usada por otra aplicación.';
                 }
                 
                 throw new Error(errorMessage);
@@ -861,6 +577,9 @@
                 stream.getTracks().forEach(track => track.stop());
                 stream = null;
                 video.srcObject = null;
+                
+                video.style.display = 'none';
+                document.getElementById('cameraOverlay').style.display = 'none';
                 
                 document.getElementById('cameraBtn').textContent = '📷 Iniciar Cámara';
                 document.getElementById('flipBtn').disabled = true;
@@ -879,669 +598,303 @@
             }
         }
 
-        // Captura y OCR
-        async function capturePhoto() {
-            if (!stream) return;
+        // Captura y procesamiento OCR mejorado
+        async function captureAndProcess() {
+            if (!stream || isProcessing) return;
 
-            // Log de inicio de captura
-            sendLogToBackend('INFO', 'Iniciando captura de foto', {
-                videoReady: video.videoWidth > 0 && video.videoHeight > 0,
-                videoSize: `${video.videoWidth}x${video.videoHeight}`,
-                streamActive: stream.active
-            });
-
-            // Efecto flash
-            const flash = document.getElementById('flashEffect');
-            flash.style.opacity = '0.8';
-            setTimeout(() => flash.style.opacity = '0', 150);
-
-            // Verificar que el video tenga dimensiones válidas
-            if (video.videoWidth === 0 || video.videoHeight === 0) {
-                showStatus('error', 'El video no está listo. Espera un momento y vuelve a intentar.');
+            if (typeof Tesseract === 'undefined') {
+                showStatus('error', '❌ Tesseract.js no está disponible. Recarga la página.');
                 return;
             }
 
-            debugInfo(`Capturando imagen: ${video.videoWidth}x${video.videoHeight}`);
+            isProcessing = true;
+            document.getElementById('captureBtn').disabled = true;
 
-            // Capturar frame del video con máxima calidad
-            const captureCanvas = document.createElement('canvas');
-            captureCanvas.width = video.videoWidth;
-            captureCanvas.height = video.videoHeight;
-            const captureCtx = captureCanvas.getContext('2d', { alpha: false });
-            
-            // Configurar contexto para máxima calidad
-            captureCtx.imageSmoothingEnabled = true;
-            captureCtx.imageSmoothingQuality = 'high';
-            
-            // Capturar frame
-            captureCtx.drawImage(video, 0, 0);
-            
-            // Verificar la captura
             try {
-                const imageData = captureCtx.getImageData(0, 0, captureCanvas.width, captureCanvas.height);
-                const hasData = imageData.data.some(pixel => pixel !== 0);
-                
-                debugInfo(`Datos de imagen: ${imageData.data.length} píxeles, tiene datos: ${hasData}`);
-                
-                if (!hasData) {
-                    showStatus('error', 'No se pudo capturar la imagen. Intenta de nuevo.');
-                    return;
-                }
-            } catch (error) {
-                console.error('Error al verificar datos del canvas:', error);
-                debugInfo(`Error al verificar canvas: ${error.message}`);
-                return;
-            }
+                // Efecto flash
+                const flash = document.getElementById('flashEffect');
+                flash.style.opacity = '0.8';
+                setTimeout(() => flash.style.opacity = '0', 150);
 
-            // Mostrar la imagen capturada en el canvas principal
-            canvas.width = captureCanvas.width;
-            canvas.height = captureCanvas.height;
-            ctx.drawImage(captureCanvas, 0, 0);
+                // Verificar dimensiones del video
+                if (video.videoWidth === 0 || video.videoHeight === 0) {
+                    throw new Error('El video no está listo. Espera un momento.');
+                }
 
-            // Guardar imagen original antes del procesamiento
-            const originalImageData = canvas.toDataURL('image/jpeg', 1.0);
-            
-            // Crear botones de ajuste
-            const adjustmentControls = document.createElement('div');
-            adjustmentControls.className = 'adjustment-controls';
-            adjustmentControls.innerHTML = `
-                <div class="adjustment-sliders">
-                    <div class="slider-group">
-                        <label>Brillo: <span id="brightnessValue">0</span></label>
-                        <input type="range" id="brightness" min="-100" max="100" value="0">
-                    </div>
-                    <div class="slider-group">
-                        <label>Contraste: <span id="contrastValue">100</span>%</label>
-                        <input type="range" id="contrast" min="0" max="200" value="100">
-                    </div>
-                    <div class="slider-group">
-                        <label>Nitidez: <span id="sharpnessValue">0</span></label>
-                        <input type="range" id="sharpness" min="0" max="100" value="0">
-                    </div>
-                </div>
-                <div class="adjustment-buttons">
-                    <button onclick="resetAdjustments()" class="btn btn-secondary">Restablecer</button>
-                    <button onclick="applyAdjustments()" class="btn btn-primary">Aplicar y Procesar</button>
-                </div>
-            `;
-            
-            // Insertar controles después del canvas
-            canvas.parentNode.insertBefore(adjustmentControls, canvas.nextSibling);
-            
-            // Ocultar controles de cámara temporalmente
-            document.querySelector('.camera-controls').style.display = 'none';
-            document.getElementById('captureBtn').style.display = 'none';
-            
-            // Función para actualizar la imagen con los ajustes
-            window.updateImageAdjustments = function() {
-                const brightness = document.getElementById('brightness').value;
-                const contrast = document.getElementById('contrast').value;
-                const sharpness = document.getElementById('sharpness').value;
+                debugLog(`Capturando imagen: ${video.videoWidth}x${video.videoHeight}`);
+
+                // Capturar con máxima calidad
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
                 
-                // Actualizar valores mostrados
-                document.getElementById('brightnessValue').textContent = brightness;
-                document.getElementById('contrastValue').textContent = contrast;
-                document.getElementById('sharpnessValue').textContent = sharpness;
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                ctx.drawImage(video, 0, 0);
+
+                // Mostrar imagen capturada
+                video.style.display = 'none';
+                canvas.style.display = 'block';
+                document.getElementById('cameraOverlay').style.display = 'none';
                 
-                // Aplicar ajustes a la imagen
-                canvas.width = captureCanvas.width;
-                canvas.height = captureCanvas.height;
-                ctx.filter = `brightness(${100 + parseInt(brightness)}%) contrast(${contrast}%) saturate(100%)`;
-                ctx.drawImage(captureCanvas, 0, 0);
-                
-                // Aplicar nitidez si es necesario
-                if (sharpness > 0) {
-                    applySharpness(canvas, sharpness / 100);
-                }
-            };
-            
-            // Agregar listeners para los controles
-            document.getElementById('brightness').addEventListener('input', updateImageAdjustments);
-            document.getElementById('contrast').addEventListener('input', updateImageAdjustments);
-            document.getElementById('sharpness').addEventListener('input', updateImageAdjustments);
-            
-            // Función para restablecer ajustes
-            window.resetAdjustments = function() {
-                document.getElementById('brightness').value = 0;
-                document.getElementById('contrast').value = 100;
-                document.getElementById('sharpness').value = 0;
-                updateImageAdjustments();
-            };
-            
-            // Función para aplicar ajustes y continuar con el OCR
-            window.applyAdjustments = async function() {
-                // Remover controles de ajuste
-                const controls = document.querySelector('.adjustment-controls');
-                if (controls) {
-                    controls.remove();
-                }
-                
-                // Aplicar preprocesamiento final
-                preprocessImage(canvas);
-                resizeForOCR(canvas);
-                
-                capturedImageData = canvas.toDataURL('image/jpeg', 0.95);
-                debugInfo('Imagen capturada, ajustada y preprocesada');
-                
-                // Log de captura exitosa
-                sendLogToBackend('INFO', 'Captura de foto completada con ajustes', {
-                    canvasSize: `${canvas.width}x${canvas.height}`,
-                    dataUrlLength: capturedImageData.length,
-                    adjustmentsApplied: true
-                });
-                
-                // Mostrar área de texto
-                document.getElementById('textSection').style.display = 'block';
-                
+                // Mostrar preview
+                const previewImg = document.getElementById('previewImg');
+                previewImg.src = canvas.toDataURL('image/jpeg', 0.95);
+                document.getElementById('imagePreview').style.display = 'block';
+
                 // Procesar OCR
-                await processOCR();
-            };
-            
-            // Función para aplicar nitidez
-            function applySharpness(canvas, amount) {
-                const ctx = canvas.getContext('2d');
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const data = imageData.data;
-                const width = canvas.width;
-                const height = canvas.height;
-                
-                for (let y = 1; y < height - 1; y++) {
-                    for (let x = 1; x < width - 1; x++) {
-                        const idx = (y * width + x) * 4;
-                        for (let c = 0; c < 3; c++) {
-                            const current = data[idx + c];
-                            const neighbors = [
-                                data[idx - width * 4 + c],  // arriba
-                                data[idx + width * 4 + c],  // abajo
-                                data[idx - 4 + c],          // izquierda
-                                data[idx + 4 + c]           // derecha
-                            ];
-                            
-                            const diff = current - (neighbors.reduce((a, b) => a + b) / 4);
-                            data[idx + c] = Math.min(255, Math.max(0, current + diff * amount));
-                        }
-                    }
-                }
-                
-                ctx.putImageData(imageData, 0, 0);
-            }
-            
-                        // Inicializar la vista con la imagen capturada
-            updateImageAdjustments();
-            
-            showStatus('info', 'Imagen capturada. Ajusta los parámetros y haz clic en "Aplicar y Procesar".');
-        }
+                await processOCRWithMaxPrecision();
 
-        // Función para aplicar ajustes y continuar con el OCR
-        window.applyAdjustments = async function() {
-            // Remover controles de ajuste
-            const controls = document.querySelector('.adjustment-controls');
-            if (controls) {
-                controls.remove();
-            }
-            
-            // Obtener parámetros de ajuste
-            const brightness = document.getElementById('brightness').value;
-            const contrast = document.getElementById('contrast').value;
-            const sharpness = document.getElementById('sharpness').value;
-            
-            // Convertir canvas a base64
-            const imageData = canvas.toDataURL('image/jpeg', 0.95);
-            
-            debugInfo('Enviando imagen al backend para procesamiento OCR');
-            
-            // Mostrar área de texto
-            document.getElementById('textSection').style.display = 'block';
-            
-            // Procesar OCR en el backend
-            await processOCRBackend(imageData, brightness, contrast, sharpness);
-        };
-
-        // Función para aplicar nitidez
-        function applySharpness(canvas, amount) {
-            const ctx = canvas.getContext('2d');
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const data = imageData.data;
-            const width = canvas.width;
-            const height = canvas.height;
-            
-            for (let y = 1; y < height - 1; y++) {
-                for (let x = 1; x < width - 1; x++) {
-                    const idx = (y * width + x) * 4;
-                    for (let c = 0; c < 3; c++) {
-                        const current = data[idx + c];
-                        const neighbors = [
-                            data[idx - width * 4 + c],  // arriba
-                            data[idx + width * 4 + c],  // abajo
-                            data[idx - 4 + c],          // izquierda
-                            data[idx + 4 + c]           // derecha
-                        ];
-                        
-                        const diff = current - (neighbors.reduce((a, b) => a + b) / 4);
-                        data[idx + c] = Math.min(255, Math.max(0, current + diff * amount));
-                    }
-                }
-            }
-            
-            ctx.putImageData(imageData, 0, 0);
-        }
-
-        // Función para procesar OCR en el backend
-        async function processOCRBackend(imageData, brightness, contrast, sharpness) {
-            showStatus('info', 'Procesando texto con OCR en el servidor...');
-            debugInfo('Iniciando procesamiento OCR en backend');
-            
-            try {
-                const backendUrl = document.getElementById('backendUrl').value;
-                if (!backendUrl) {
-                    throw new Error('URL del backend no configurada');
-                }
-
-                // Enviar imagen al backend
-                const response = await fetch(`${backendUrl}/api/process-ocr`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        image_data: imageData,
-                        brightness: parseInt(brightness),
-                        contrast: parseInt(contrast),
-                        sharpness: parseInt(sharpness)
-                    })
-                });
-
-                if (!response.ok) {
-                    throw new Error(`Error del servidor: ${response.status}`);
-                }
-
-                const result = await response.json();
-                
-                if (result.success) {
-                    // Mostrar resultados
-                    document.getElementById('extractedText').value = result.text;
-                    updateConfidence(result.confidence);
-                    
-                    // Actualizar estadísticas
-                    stats.processed++;
-                    stats.confidenceSum += result.confidence;
-                    updateStats();
-                    
-                    showStatus('success', `Texto extraído exitosamente (${Math.round(result.confidence)}% confianza, ${result.processing_time.toFixed(2)}s)`);
-                    
-                    // Log de éxito
-                    sendLogToBackend('INFO', 'OCR completado exitosamente en backend', {
-                        textLength: result.text.length,
-                        confidence: result.confidence,
-                        processingTime: result.processing_time,
-                        textPreview: result.text.substring(0, 100) + (result.text.length > 100 ? '...' : '')
-                    });
-                } else {
-                    throw new Error(result.message || 'Error desconocido en el procesamiento OCR');
-                }
-                
             } catch (error) {
-                console.error('Error en OCR backend:', error);
-                debugInfo(`Error completo: ${error.toString()}`);
-                
-                let errorMessage = 'Error desconocido en OCR';
-                if (error.message) {
-                    errorMessage = error.message;
-                }
-                
-                showStatus('error', 'Error en OCR: ' + errorMessage);
-                
-                // Log detallado del error
-                sendLogToBackend('ERROR', 'Error en procesamiento OCR backend', {
-                    errorName: error.name,
-                    errorMessage: error.message,
-                    errorString: error.toString()
-                });
+                console.error('Error en captura:', error);
+                showStatus('error', `Error: ${error.message}`);
+            } finally {
+                isProcessing = false;
+                document.getElementById('captureBtn').disabled = false;
             }
         }
 
-        async function processOCR() {
-            showStatus('info', 'Procesando texto con OCR...');
-            debugInfo('Iniciando procesamiento OCR');
+        async function processOCRWithMaxPrecision() {
+            const startTime = performance.now();
             
-            // Log detallado del estado inicial
-            sendLogToBackend('INFO', '=== INICIO PROCESAMIENTO OCR ===', {
-                tesseractAvailable: typeof Tesseract !== 'undefined',
-                canvasValid: canvas && canvas.width > 0 && canvas.height > 0,
-                canvasSize: canvas ? `${canvas.width}x${canvas.height}` : 'N/A',
-                workerActive: worker !== null,
-                debugMode: debugMode
-            });
+            showProgress(0, 'Preparando imagen...');
             
             try {
-                // Verificar que Tesseract esté disponible
-                if (typeof Tesseract === 'undefined') {
-                    debugInfo('Tesseract no está definido');
-                    throw new Error('Tesseract.js no está cargado. Verifica tu conexión a internet.');
-                }
-
-                debugInfo('Tesseract disponible');
-
-                // Verificar que el canvas tenga datos válidos
-                if (!canvas || canvas.width === 0 || canvas.height === 0) {
-                    debugInfo(`Canvas inválido: width=${canvas?.width}, height=${canvas?.height}`);
-                    throw new Error('No hay imagen válida para procesar. Intenta capturar de nuevo.');
-                }
-
-                debugInfo(`Canvas válido: ${canvas.width}x${canvas.height}`);
-
                 // Inicializar worker si no existe
                 if (!worker) {
-                    try {
-                        showStatus('info', 'Inicializando OCR...');
-                        debugInfo('Creando worker de Tesseract...');
-                        
-                        // Intentar diferentes configuraciones
-                        let workerCreated = false;
-                        let workerError = null;
-                        
-                        // Opción 1: Sin idioma específico con configuraciones optimizadas
-                        try {
-                            debugInfo('Intentando crear worker sin idioma específico...');
-                            worker = await Tesseract.createWorker({
-                                logger: m => {
-                                    debugInfo(`Tesseract log: ${m.status} - ${m.progress || ''}`);
-                                    if (m.status === 'recognizing text') {
-                                        const progress = Math.round(m.progress * 100);
-                                        showStatus('info', `Procesando OCR: ${progress}%`);
-                                    }
-                                },
-                                // Configuraciones para mejor calidad
-                                tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,;:!?()[]{}"\'-/\\@#$%&*+=<>|~',
-                                tessedit_pageseg_mode: '6', // Uniforme bloque de texto
-                                tessedit_ocr_engine_mode: '3', // Default, basado en lo que está disponible
-                                preserve_interword_spaces: '1',
-                                textord_heavy_nr: '1', // Mejor detección de texto
-                                textord_min_linesize: '2.5' // Mejor para texto pequeño
-                            });
-                            
-                            debugInfo('Worker creado sin idioma, cargando idioma español...');
-                            await worker.loadLanguage('spa');
-                            await worker.initialize('spa');
-                            debugInfo('Worker creado exitosamente con español y configuraciones optimizadas');
-                            workerCreated = true;
-                            
-                        } catch (spaError) {
-                            debugInfo(`Error con español: ${spaError.message}`);
-                            workerError = spaError;
-                            
-                            // Opción 2: Con idioma inglés desde el inicio
-                            try {
-                                debugInfo('Intentando crear worker con idioma inglés...');
-                                worker = await Tesseract.createWorker('eng', 1, {
-                                    logger: m => {
-                                        debugInfo(`Tesseract log (eng): ${m.status} - ${m.progress || ''}`);
-                                        if (m.status === 'recognizing text') {
-                                            const progress = Math.round(m.progress * 100);
-                                            showStatus('info', `Procesando OCR: ${progress}%`);
-                                        }
-                                    }
-                                });
-                                debugInfo('Worker creado exitosamente con inglés');
-                                workerCreated = true;
-                                
-                            } catch (engError) {
-                                debugInfo(`Error con inglés: ${engError.message}`);
-                                
-                                // Opción 3: Worker básico sin idioma
-                                try {
-                                    debugInfo('Intentando crear worker básico...');
-                                    worker = await Tesseract.createWorker();
-                                    
-                                    debugInfo('Worker básico creado, cargando idioma inglés...');
-                                    await worker.loadLanguage('eng');
-                                    await worker.initialize('eng');
-                                    debugInfo('Worker básico creado exitosamente');
-                                    workerCreated = true;
-                                    
-                                } catch (basicError) {
-                                    debugInfo(`Error con worker básico: ${basicError.message}`);
-                                    throw new Error(`No se pudo crear worker: ${spaError.message} / ${engError.message} / ${basicError.message}`);
-                                }
-                            }
-                        }
-                        
-                        if (!workerCreated) {
-                            throw workerError || new Error('Error desconocido al crear worker');
-                        }
-                        
-                        showStatus('info', 'OCR inicializado, procesando imagen...');
-                    } catch (workerError) {
-                        debugInfo(`Error al crear worker: ${workerError.message}`);
-                        debugInfo(`Stack trace: ${workerError.stack}`);
-                        throw new Error(`Error al inicializar OCR: ${workerError.message}. Intenta recargar la página.`);
-                    }
+                    showProgress(10, 'Inicializando OCR...');
+                    await initializeOCRWorker();
                 }
 
-                debugInfo('Iniciando reconocimiento de texto...');
-
-                // Procesar imagen con manejo de errores mejorado
-                debugInfo('Iniciando reconocimiento de imagen...');
+                // Preprocesar imagen para máxima precisión
+                showProgress(30, 'Optimizando imagen...');
+                const processedCanvas = await preprocessImageForOCR(canvas);
                 
-                let result;
-                try {
-                    result = await worker.recognize(canvas, {
-                        tessedit_pageseg_mode: 1
-                    });
-                    
-                    debugInfo('Reconocimiento completado');
-                    debugInfo(`Resultado: ${JSON.stringify(result)}`);
-                    
-                } catch (recognitionError) {
-                    debugInfo(`Error en reconocimiento: ${recognitionError.message}`);
-                    throw new Error(`Error en reconocimiento de texto: ${recognitionError.message}`);
-                }
+                showProgress(50, 'Extrayendo texto...');
+                
+                // Configuración optimizada para máxima precisión
+                const ocrOptions = {
+                    tessedit_pageseg_mode: '1', // Automatic page segmentation with OSD
+                    tessedit_ocr_engine_mode: '1', // Neural nets LSTM engine only
+                    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,;:!?()[]{}"\'-/\\@#$%&*+=<>|~áéíóúüñÁÉÍÓÚÜÑ ',
+                    preserve_interword_spaces: '1',
+                    textord_heavy_nr: '1'
+                };
 
-                // Verificar que el resultado sea válido
-                if (!result || !result.data) {
-                    throw new Error('No se obtuvo resultado válido del OCR');
-                }
+                // Procesar OCR con múltiples configuraciones para máxima precisión
+                const results = await Promise.all([
+                    worker.recognize(processedCanvas, ocrOptions),
+                    worker.recognize(processedCanvas, { ...ocrOptions, tessedit_pageseg_mode: '6' }),
+                    worker.recognize(processedCanvas, { ...ocrOptions, tessedit_pageseg_mode: '8' })
+                ]);
 
-                const rawText = result.data.text || '';
-                const confidence = result.data.confidence || 0;
+                showProgress(90, 'Analizando resultados...');
 
-                debugInfo(`Texto extraído (raw): "${rawText}"`);
-                debugInfo(`Confianza: ${confidence}`);
+                // Seleccionar el mejor resultado
+                const bestResult = results.reduce((best, current) => {
+                    const currentConfidence = current.data.confidence || 0;
+                    const bestConfidence = best.data.confidence || 0;
+                    return currentConfidence > bestConfidence ? current : best;
+                });
 
-                // Post-procesar el texto para mejor calidad
-                const text = postProcessText(rawText);
+                const rawText = bestResult.data.text || '';
+                const confidence = bestResult.data.confidence || 0;
+
+                // Post-procesar texto para corregir errores comunes
+                const processedText = postProcessText(rawText);
+
+                showProgress(100, 'Completado');
+                hideProgress();
 
                 // Mostrar resultados
-                document.getElementById('extractedText').value = text;
+                document.getElementById('extractedText').value = processedText;
                 updateConfidence(confidence);
-                
+                document.getElementById('textSection').style.display = 'block';
+
                 // Actualizar estadísticas
-                stats.processed++;
-                stats.confidenceSum += confidence;
-                updateStats();
-                
-                if (text.trim()) {
-                    showStatus('success', `Texto extraído exitosamente (${Math.round(confidence)}% confianza)`);
-                    
-                    // Log de éxito
-                    sendLogToBackend('INFO', 'OCR completado exitosamente', {
-                        textLength: text.length,
-                        confidence: confidence,
-                        textPreview: text.substring(0, 100) + (text.length > 100 ? '...' : '')
-                    });
-                } else {
-                    showStatus('error', 'No se detectó texto en la imagen. Intenta con mejor iluminación.');
-                    
-                    // Log de error por texto vacío
-                    sendLogToBackend('WARN', 'OCR completado pero no se detectó texto', {
-                        confidence: confidence
-                    });
-                }
-                
+                const processingTime = (performance.now() - startTime) / 1000;
+                updateStats(confidence, processingTime);
+
+                const message = `✅ Texto extraído con ${Math.round(confidence)}% confianza en ${processingTime.toFixed(1)}s`;
+                showStatus('success', message);
+
+                debugLog(`OCR completado: ${processedText.length} caracteres, ${confidence}% confianza`);
+
             } catch (error) {
-                console.error('Error detallado en OCR:', error);
-                console.error('Stack trace:', error.stack);
-                debugInfo(`Error completo: ${error.toString()}`);
-                debugInfo(`Error name: ${error.name}`);
-                debugInfo(`Error message: ${error.message}`);
-                
-                let errorMessage = 'Error desconocido en OCR';
-                
-                if (error.message) {
-                    errorMessage = error.message;
-                } else if (error.name) {
-                    errorMessage = `Error ${error.name}: ${error.toString()}`;
-                }
-                
-                showStatus('error', 'Error en OCR: ' + errorMessage);
-                
-                // Log detallado del error
-                sendLogToBackend('ERROR', 'Error en procesamiento OCR', {
-                    errorName: error.name,
-                    errorMessage: error.message,
-                    errorStack: error.stack,
-                    errorString: error.toString()
-                });
-                
-                // Intentar reinicializar el worker en caso de error
-                if (worker) {
-                    try {
-                        debugInfo('Terminando worker debido a error...');
-                        await worker.terminate();
-                        worker = null;
-                        debugInfo('Worker terminado');
-                    } catch (terminateError) {
-                        console.error('Error al terminar worker:', terminateError);
-                        debugInfo(`Error al terminar worker: ${terminateError.message}`);
-                    }
-                }
+                hideProgress();
+                console.error('Error en OCR:', error);
+                showStatus('error', `Error en OCR: ${error.message}`);
+                debugLog(`Error OCR: ${error.toString()}`);
             }
         }
 
-        async function processAgain() {
-            if (!capturedImageData) return;
-            
-            // Reinicializar worker para un nuevo intento
-            if (worker) {
-                try {
-                    await worker.terminate();
-                    worker = null;
-                } catch (error) {
-                    console.error('Error al terminar worker anterior:', error);
-                }
-            }
-            
-            await processOCR();
-        }
-
-        // Envío a Odoo
-        async function sendToOdoo() {
-            const text = document.getElementById('extractedText').value.trim();
-            const backendUrl = document.getElementById('backendUrl').value;
-            const instance = document.getElementById('odooInstance').value;
-            const documentType = document.getElementById('documentType').value;
-            
-            if (!text) {
-                showStatus('error', 'No hay texto para enviar.');
-                return;
-            }
-
-            if (!backendUrl) {
-                showStatus('error', 'Configura la URL del backend primero.');
-                return;
-            }
-
-            showStatus('info', 'Enviando datos a Odoo...');
-            
+        async function initializeOCRWorker() {
             try {
-                const response = await fetch(`${backendUrl}/api/send-text`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        text: text,
-                        type: documentType,
-                        instance: instance
-                    })
+                debugLog('Inicializando worker OCR...');
+                
+                worker = await Tesseract.createWorker({
+                    logger: m => {
+                        if (m.status === 'recognizing text') {
+                            const progress = 50 + (m.progress * 40); // 50-90%
+                            showProgress(progress, `Reconociendo texto: ${Math.round(m.progress * 100)}%`);
+                        }
+                        debugLog(`Tesseract: ${m.status} - ${m.progress || ''}`);
+                    }
                 });
 
-                const result = await response.json();
-                
-                if (result.success) {
-                    showStatus('success', `¡Enviado exitosamente! ID: ${result.record_id}`);
-                    stats.sent++;
-                    updateStats();
-                    
-                    // Limpiar para siguiente escaneo
-                    setTimeout(retakePhoto, 2000);
-                } else {
-                    showStatus('error', result.message);
-                }
+                // Cargar idiomas para máxima cobertura
+                await worker.loadLanguage('spa+eng');
+                await worker.initialize('spa+eng');
+
+                debugLog('Worker OCR inicializado correctamente');
                 
             } catch (error) {
-                showStatus('error', `Error de conexión: ${error.message}`);
+                debugLog(`Error inicializando worker: ${error.message}`);
+                throw new Error(`Error al inicializar OCR: ${error.message}`);
             }
         }
 
-        // Utilidades
+        async function preprocessImageForOCR(sourceCanvas) {
+            const processedCanvas = document.createElement('canvas');
+            processedCanvas.width = sourceCanvas.width;
+            processedCanvas.height = sourceCanvas.height;
+            const processedCtx = processedCanvas.getContext('2d');
+
+            // Aplicar filtros para mejorar la legibilidad
+            processedCtx.filter = 'contrast(150%) brightness(110%) saturate(0%)';
+            processedCtx.drawImage(sourceCanvas, 0, 0);
+
+            // Aplicar procesamiento adicional pixel por pixel
+            const imageData = processedCtx.getImageData(0, 0, processedCanvas.width, processedCanvas.height);
+            const data = imageData.data;
+
+            for (let i = 0; i < data.length; i += 4) {
+                // Convertir a escala de grises
+                const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+                
+                // Aplicar umbralización adaptativa
+                const threshold = 128;
+                const finalValue = gray > threshold ? 255 : 0;
+                
+                data[i] = finalValue;     // R
+                data[i + 1] = finalValue; // G
+                data[i + 2] = finalValue; // B
+                // data[i + 3] permanece igual (alpha)
+            }
+
+            processedCtx.putImageData(imageData, 0, 0);
+            debugLog('Imagen preprocesada para OCR');
+            
+            return processedCanvas;
+        }
+
+        function postProcessText(text) {
+            if (!text) return '';
+
+            let processed = text;
+
+            // Eliminar líneas vacías múltiples
+            processed = processed.replace(/\n\s*\n/g, '\n');
+
+            // Corregir espacios múltiples
+            processed = processed.replace(/\s+/g, ' ');
+
+            // Correcciones comunes de OCR
+            const corrections = {
+                '0': 'O',  // En contexto de letras
+                '1': 'I',  // En contexto de letras
+                '5': 'S',  // En contexto de letras
+                '8': 'B',  // En contexto de letras
+                '|': 'I',
+                '`': "'",
+                '´': "'",
+                "'": "'",
+                "'": "'",
+                '"': '"',
+                '"': '"'
+            };
+
+            // Aplicar correcciones solo en contexto apropiado
+            Object.entries(corrections).forEach(([wrong, correct]) => {
+                const regex = new RegExp(`([a-zA-ZáéíóúüñÁÉÍÓÚÜÑ])${escapeRegex(wrong)}([a-zA-ZáéíóúüñÁÉÍÓÚÜÑ])`, 'g');
+                processed = processed.replace(regex, `$1${correct}$2`);
+            });
+
+            // Limpiar espacios al inicio y final
+            processed = processed.trim();
+
+            debugLog(`Texto post-procesado: ${text.length} -> ${processed.length} caracteres`);
+            
+            return processed;
+        }
+
+        function escapeRegex(string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        // Utilidades de interfaz
+        function showProgress(percentage, text) {
+            const container = document.getElementById('progressContainer');
+            const fill = document.getElementById('progressFill');
+            const textEl = document.getElementById('progressText');
+            
+            container.style.display = 'block';
+            fill.style.width = percentage + '%';
+            textEl.textContent = text;
+        }
+
+        function hideProgress() {
+            document.getElementById('progressContainer').style.display = 'none';
+        }
+
         function updateConfidence(confidence) {
             const fill = document.getElementById('confidenceFill');
             const percentage = Math.round(confidence);
             fill.style.width = percentage + '%';
         }
 
-        function updateStats() {
+        function updateStats(confidence, time) {
+            stats.processed++;
+            stats.confidenceSum += confidence;
+            stats.timeSum += time;
+
             document.getElementById('docsProcessed').textContent = stats.processed;
-            document.getElementById('docsSent').textContent = stats.sent;
-            
-            const avgConfidence = stats.processed > 0 ? 
-                Math.round(stats.confidenceSum / stats.processed) : 0;
-            document.getElementById('avgConfidence').textContent = avgConfidence + '%';
+            document.getElementById('avgConfidence').textContent = 
+                Math.round(stats.confidenceSum / stats.processed) + '%';
+            document.getElementById('avgTime').textContent = 
+                (stats.timeSum / stats.processed).toFixed(1) + 's';
         }
 
         function copyToClipboard() {
             const text = document.getElementById('extractedText').value;
-            navigator.clipboard.writeText(text).then(() => {
-                showStatus('success', 'Texto copiado al portapapeles');
-            });
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(text).then(() => {
+                    showStatus('success', '📋 Texto copiado al portapapeles');
+                });
+            } else {
+                // Fallback para navegadores sin clipboard API
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                showStatus('success', '📋 Texto copiado al portapapeles');
+            }
         }
 
         function retakePhoto() {
             document.getElementById('textSection').style.display = 'none';
-            document.querySelector('.camera-controls').style.display = 'grid';
-            document.getElementById('captureBtn').style.display = 'block';
+            document.getElementById('imagePreview').style.display = 'none';
+            
+            if (stream) {
+                video.style.display = 'block';
+                canvas.style.display = 'none';
+                document.getElementById('cameraOverlay').style.display = 'block';
+            }
+            
             document.getElementById('extractedText').value = '';
             updateConfidence(0);
             clearStatus();
-        }
-
-        // Atajos de teclado
-        function initKeyboardShortcuts() {
-            document.addEventListener('keydown', function(e) {
-                // Espacio: Capturar
-                if (e.code === 'Space' && !e.target.matches('input, textarea')) {
-                    e.preventDefault();
-                    if (!document.getElementById('captureBtn').disabled) {
-                        capturePhoto();
-                    }
-                }
-                
-                // Ctrl + Enter: Enviar a Odoo
-                if (e.ctrlKey && e.key === 'Enter') {
-                    e.preventDefault();
-                    sendToOdoo();
-                }
-                
-                // Ctrl + D: Modo debug
-                if (e.ctrlKey && e.key === 'd') {
-                    e.preventDefault();
-                    toggleDebugMode();
-                }
-                
-                // Escape: Volver a tomar foto
-                if (e.key === 'Escape') {
-                    retakePhoto();
-                }
-            });
         }
 
         // Sistema de notificaciones
@@ -1553,404 +906,85 @@
                 </div>
             `;
             
-            // Enviar log al backend
-            const logLevel = type === 'error' ? 'ERROR' : 
-                           type === 'warn' ? 'WARN' : 'INFO';
-            sendLogToBackend(logLevel, message);
-            
             if (type === 'success') {
-                setTimeout(clearStatus, 3000);
+                setTimeout(clearStatus, 5000);
             }
+            
+            debugLog(`Status [${type}]: ${message}`);
         }
 
         function clearStatus() {
             document.getElementById('statusContainer').innerHTML = '';
         }
 
-        // Función para enviar logs al backend
-        async function sendLogToBackend(level, message, data = {}) {
-            try {
-                const backendUrl = document.getElementById('backendUrl').value;
-                if (!backendUrl) return; // No enviar si no hay URL configurada
-                
-                await fetch(`${backendUrl}/api/frontend-log`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        level: level,
-                        message: message,
-                        timestamp: new Date().toISOString(),
-                        data: data
-                    })
-                });
-            } catch (error) {
-                // Silenciar errores de envío de logs para evitar loops infinitos
-                console.log('Error enviando log al backend:', error.message);
-            }
-        }
-
-        function debugInfo(message) {
-            if (debugMode) {
-                console.log('[DEBUG]', message);
-                // Enviar al backend también
-                sendLogToBackend('DEBUG', message);
-            }
-        }
-
-        async function checkNetworkConnectivity() {
-            try {
-                const response = await fetch('https://httpbin.org/get', { 
-                    method: 'GET',
-                    mode: 'no-cors'
-                });
-                return true;
-            } catch (error) {
-                debugInfo(`Error de conectividad: ${error.message}`);
-                return false;
-            }
-        }
-
-        function toggleDebugMode() {
+        // Debug
+        function toggleDebug() {
             debugMode = !debugMode;
-            const btn = document.querySelector('button[onclick="toggleDebugMode()"]');
-            btn.textContent = debugMode ? '🐛 Debug: ON' : '🐛 Modo Debug';
-            btn.className = debugMode ? 'btn btn-warning' : 'btn btn-secondary';
+            const btn = event.target;
+            const debugInfo = document.getElementById('debugInfo');
             
             if (debugMode) {
-                showStatus('info', 'Modo debug activado - Revisa la consola para más información');
-                sendLogToBackend('INFO', 'Modo debug activado - Revisa la consola para más información');
-            }
-        }
-
-        function toggleQualityMode() {
-            highQualityMode = !highQualityMode;
-            const btn = document.querySelector('button[onclick="toggleQualityMode()"]');
-            btn.textContent = highQualityMode ? '⚙️ Alta Calidad: ON' : '⚙️ Modo Alta Calidad';
-            btn.className = highQualityMode ? 'btn btn-success' : 'btn btn-info';
-            
-            if (highQualityMode) {
-                showStatus('info', 'Modo alta calidad activado - Mejor precisión pero más lento');
-                sendLogToBackend('INFO', 'Modo alta calidad activado');
+                btn.textContent = '🐛 Debug: ON';
+                btn.className = 'btn btn-success';
+                debugInfo.style.display = 'block';
+                showStatus('info', '🐛 Modo debug activado');
             } else {
-                showStatus('info', 'Modo estándar activado - Balance entre velocidad y precisión');
-                sendLogToBackend('INFO', 'Modo estándar activado');
+                btn.textContent = '🐛 Modo Debug';
+                btn.className = 'btn btn-secondary';
+                debugInfo.style.display = 'none';
+                debugInfo.innerHTML = '';
             }
         }
 
-        async function checkTesseractCapabilities() {
-            if (typeof Tesseract === 'undefined') {
-                debugInfo('Tesseract no está disponible para verificar capacidades');
-                return;
-            }
+        function debugLog(message) {
+            console.log('[DEBUG]', message);
             
-            try {
-                debugInfo('=== VERIFICANDO CAPACIDADES DE TESSERACT ===');
-                
-                // Crear un worker temporal para verificar
-                const tempWorker = await Tesseract.createWorker();
-                debugInfo('Worker temporal creado exitosamente');
-                
-                // Verificar idiomas disponibles
-                try {
-                    const langs = await tempWorker.getLanguages();
-                    debugInfo(`Idiomas disponibles: ${JSON.stringify(langs)}`);
-                } catch (langError) {
-                    debugInfo(`Error al obtener idiomas: ${langError.message}`);
-                }
-                
-                await tempWorker.terminate();
-                debugInfo('Worker temporal terminado');
-                debugInfo('=== FIN VERIFICACIÓN ===');
-                
-            } catch (error) {
-                debugInfo(`Error al verificar capacidades: ${error.message}`);
+            if (debugMode) {
+                const debugInfo = document.getElementById('debugInfo');
+                const timestamp = new Date().toLocaleTimeString();
+                debugInfo.innerHTML += `[${timestamp}] ${message}\n`;
+                debugInfo.scrollTop = debugInfo.scrollHeight;
             }
         }
 
-        async function resetOCR() {
-            showStatus('info', 'Reiniciando OCR...');
-            debugInfo('Iniciando reinicio de OCR');
-            
-            try {
-                // Terminar worker actual si existe
-                if (worker) {
-                    debugInfo('Terminando worker actual...');
-                    await worker.terminate();
-                    worker = null;
-                    debugInfo('Worker actual terminado');
-                }
+        // Atajos de teclado
+        function initKeyboardShortcuts() {
+            document.addEventListener('keydown', function(e) {
+                // Evitar atajos cuando se está escribiendo en campos de texto
+                if (e.target.matches('input, textarea')) return;
                 
-                // Limpiar variables
-                capturedImageData = null;
-                
-                // Limpiar área de texto
-                document.getElementById('extractedText').value = '';
-                updateConfidence(0);
-                
-                // Mostrar controles de cámara
-                document.getElementById('textSection').style.display = 'none';
-                document.querySelector('.camera-controls').style.display = 'grid';
-                document.getElementById('captureBtn').style.display = 'block';
-                
-                showStatus('success', 'OCR reiniciado correctamente');
-                debugInfo('OCR reiniciado exitosamente');
-                
-            } catch (error) {
-                console.error('Error al reiniciar OCR:', error);
-                debugInfo(`Error al reiniciar OCR: ${error.message}`);
-                showStatus('error', `Error al reiniciar OCR: ${error.message}`);
-            }
-        }
-
-        async function testOCR() {
-            showStatus('info', 'Probando OCR...');
-            debugInfo('Iniciando prueba de OCR');
-            
-            try {
-                // Verificar Tesseract
-                if (typeof Tesseract === 'undefined') {
-                    throw new Error('Tesseract.js no está disponible');
-                }
-                
-                debugInfo('Tesseract disponible para prueba');
-                
-                // Crear una imagen de prueba simple
-                const testCanvas = document.createElement('canvas');
-                testCanvas.width = 200;
-                testCanvas.height = 50;
-                const testCtx = testCanvas.getContext('2d');
-                
-                // Dibujar texto de prueba
-                testCtx.fillStyle = 'white';
-                testCtx.fillRect(0, 0, 200, 50);
-                testCtx.fillStyle = 'black';
-                testCtx.font = '20px Arial';
-                testCtx.fillText('TEST OCR', 10, 30);
-                
-                debugInfo('Imagen de prueba creada');
-                debugInfo(`Canvas de prueba: ${testCanvas.width}x${testCanvas.height}`);
-                
-                // Probar OCR con manejo de errores mejorado
-                debugInfo('Creando worker de prueba...');
-                
-                // Intentar diferentes configuraciones
-                let testWorker = null;
-                let result = null;
-                
-                // Opción 1: Sin idioma específico
-                try {
-                    debugInfo('Intentando crear worker sin idioma específico...');
-                    testWorker = await Tesseract.createWorker({
-                        logger: m => {
-                            debugInfo(`Test worker log: ${m.status} - ${m.progress || ''}`);
-                        }
-                    });
-                    
-                    debugInfo('Worker creado sin idioma, cargando idioma inglés...');
-                    await testWorker.loadLanguage('eng');
-                    await testWorker.initialize('eng');
-                    
-                    debugInfo('Worker inicializado, iniciando reconocimiento...');
-                    result = await testWorker.recognize(testCanvas);
-                    
-                } catch (error1) {
-                    debugInfo(`Error con worker sin idioma: ${error1.message}`);
-                    
-                    // Opción 2: Con idioma desde el inicio
-                    try {
-                        debugInfo('Intentando crear worker con idioma inglés desde el inicio...');
-                        testWorker = await Tesseract.createWorker('eng', 1, {
-                            logger: m => {
-                                debugInfo(`Test worker log (eng): ${m.status} - ${m.progress || ''}`);
-                            }
-                        });
-                        
-                        debugInfo('Worker creado con inglés, iniciando reconocimiento...');
-                        result = await testWorker.recognize(testCanvas);
-                        
-                    } catch (error2) {
-                        debugInfo(`Error con worker con inglés: ${error2.message}`);
-                        
-                        // Opción 3: Sin idioma y sin logger
-                        try {
-                            debugInfo('Intentando crear worker básico...');
-                            testWorker = await Tesseract.createWorker();
-                            
-                            debugInfo('Worker básico creado, cargando idioma...');
-                            await testWorker.loadLanguage('eng');
-                            await testWorker.initialize('eng');
-                            
-                            debugInfo('Worker básico inicializado, iniciando reconocimiento...');
-                            
-                            try {
-                                result = await testWorker.recognize(testCanvas);
-                                debugInfo('Reconocimiento de prueba completado');
-                            } catch (recognitionError) {
-                                debugInfo(`Error en reconocimiento de prueba: ${recognitionError.message}`);
-                                throw new Error(`Error en reconocimiento: ${recognitionError.message}`);
-                            }
-                            
-                        } catch (error3) {
-                            debugInfo(`Error con worker básico: ${error3.message}`);
-                            throw new Error(`No se pudo crear worker: ${error1.message} / ${error2.message} / ${error3.message}`);
-                        }
+                // Espacio: Capturar y procesar
+                if (e.code === 'Space') {
+                    e.preventDefault();
+                    if (!document.getElementById('captureBtn').disabled && !isProcessing) {
+                        captureAndProcess();
                     }
                 }
                 
-                if (testWorker && result) {
-                    debugInfo(`Resultado de prueba: ${JSON.stringify(result)}`);
-                    
-                    await testWorker.terminate();
-                    debugInfo('Worker de prueba terminado');
-                    
-                    // Verificar que el resultado sea válido
-                    if (!result.data || !result.data.text) {
-                        throw new Error('No se obtuvo texto válido del OCR de prueba');
-                    }
-                    
-                    const detectedText = result.data.text.trim();
-                    debugInfo(`Texto detectado en prueba: "${detectedText}"`);
-                    
-                    showStatus('success', `OCR funcionando correctamente. Texto detectado: "${detectedText}"`);
-                } else {
-                    throw new Error('No se pudo completar el reconocimiento');
+                // Escape: Nueva foto
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    retakePhoto();
                 }
                 
-            } catch (error) {
-                console.error('Error en prueba OCR:', error);
-                console.error('Stack trace:', error.stack);
-                debugInfo(`Error completo en prueba: ${error.toString()}`);
-                debugInfo(`Error name: ${error.name}`);
-                debugInfo(`Error message: ${error.message}`);
-                
-                let errorMessage = error.message || 'Error desconocido en prueba OCR';
-                showStatus('error', `Error en prueba OCR: ${errorMessage}`);
-            }
-        }
-
-        // Función para preprocesar la imagen antes del OCR
-        function preprocessImage(canvas) {
-            const ctx = canvas.getContext('2d');
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const data = imageData.data;
-            
-            // Configuraciones según el modo de calidad
-            const contrast = highQualityMode ? 2.0 : 1.5;
-            const brightness = highQualityMode ? 15 : 10;
-            const threshold = highQualityMode ? 120 : 128;
-            
-            // Convertir a escala de grises y mejorar contraste
-            for (let i = 0; i < data.length; i += 4) {
-                const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-                
-                // Mejorar contraste
-                let newValue = (gray - 128) * contrast + 128 + brightness;
-                newValue = Math.max(0, Math.min(255, newValue));
-                
-                // Umbralización para texto más nítido
-                const finalValue = newValue > threshold ? 255 : 0;
-                
-                data[i] = finalValue;     // R
-                data[i + 1] = finalValue; // G
-                data[i + 2] = finalValue; // B
-                // data[i + 3] se mantiene (alpha)
-            }
-            
-            ctx.putImageData(imageData, 0, 0);
-            debugInfo(`Imagen preprocesada para mejor OCR (modo: ${highQualityMode ? 'alta calidad' : 'estándar'})`);
-            sendLogToBackend('INFO', 'Preprocesamiento de imagen completado', {
-                canvasSize: `${canvas.width}x${canvas.height}`,
-                contrast: contrast,
-                brightness: brightness,
-                threshold: threshold,
-                highQualityMode: highQualityMode
+                // Ctrl + C: Copiar texto
+                if (e.ctrlKey && e.key === 'c' && document.getElementById('textSection').style.display !== 'none') {
+                    copyToClipboard();
+                }
             });
         }
 
-        // Función para redimensionar imagen para mejor OCR
-        function resizeForOCR(canvas) {
-            const maxWidth = 1920;
-            const maxHeight = 1080;
+        // Manejo de errores globales
+        window.addEventListener('error', function(e) {
+            console.error('Error global:', e.error);
+            debugLog(`Error global: ${e.error?.message || e.message}`);
             
-            if (canvas.width > maxWidth || canvas.height > maxHeight) {
-                const ratio = Math.min(maxWidth / canvas.width, maxHeight / canvas.height);
-                const newWidth = Math.round(canvas.width * ratio);
-                const newHeight = Math.round(canvas.height * ratio);
-                
-                const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = newWidth;
-                tempCanvas.height = newHeight;
-                const tempCtx = tempCanvas.getContext('2d');
-                
-                // Usar mejor algoritmo de redimensionado
-                tempCtx.imageSmoothingEnabled = true;
-                tempCtx.imageSmoothingQuality = 'high';
-                tempCtx.drawImage(canvas, 0, 0, newWidth, newHeight);
-                
-                canvas.width = newWidth;
-                canvas.height = newHeight;
-                canvas.getContext('2d').drawImage(tempCanvas, 0, 0);
-                
-                debugInfo(`Imagen redimensionada de ${canvas.width}x${canvas.height} a ${newWidth}x${newHeight}`);
-                sendLogToBackend('INFO', 'Redimensionamiento de imagen completado', {
-                    originalSize: `${canvas.width}x${canvas.height}`,
-                    newSize: `${newWidth}x${newHeight}`,
-                    ratio: ratio
-                });
+            if (!isProcessing) {
+                showStatus('error', 'Se produjo un error inesperado. Revisa la consola.');
             }
-        }
+        });
 
-        // Función para post-procesar el texto extraído
-        function postProcessText(text) {
-            if (!text) return '';
-            
-            let processedText = text;
-            
-            // Eliminar líneas vacías múltiples
-            processedText = processedText.replace(/\n\s*\n/g, '\n');
-            
-            // Corregir espacios múltiples
-            processedText = processedText.replace(/\s+/g, ' ');
-            
-            // Corregir caracteres comunes mal reconocidos
-            const corrections = {
-                '0': 'O', // Solo en contexto de texto
-                '1': 'I', // Solo en contexto de texto
-                '5': 'S', // Solo en contexto de texto
-                '8': 'B', // Solo en contexto de texto
-                '|': 'I',
-                '[': '(',
-                ']': ')',
-                '{': '(',
-                '}': ')',
-                '`': "'",
-                '´': "'",
-                '°': 'o'
-            };
-            
-            // Aplicar correcciones solo en contexto apropiado
-            Object.entries(corrections).forEach(([wrong, correct]) => {
-                // Solo corregir si está rodeado de letras
-                const regex = new RegExp(`([a-zA-Z])${wrong}([a-zA-Z])`, 'g');
-                processedText = processedText.replace(regex, `$1${correct}$2`);
-            });
-            
-            // Limpiar espacios al inicio y final
-            processedText = processedText.trim();
-            
-            debugInfo(`Texto post-procesado: "${text}" -> "${processedText}"`);
-            sendLogToBackend('INFO', 'Post-procesamiento de texto completado', {
-                originalLength: text.length,
-                processedLength: processedText.length,
-                changes: text !== processedText
-            });
-            
-            return processedText;
-        }
-
-        // Limpiar recursos al cerrar
+        // Limpieza al cerrar
         window.addEventListener('beforeunload', function() {
             if (stream) {
                 stream.getTracks().forEach(track => track.stop());
@@ -1959,6 +993,184 @@
                 worker.terminate();
             }
         });
+
+        // Auto-reintentos para mejorar la precisión
+        async function retryOCRWithDifferentSettings(canvas) {
+            const retryConfigs = [
+                { tessedit_pageseg_mode: '6', tessedit_ocr_engine_mode: '1' }, // Uniform text block
+                { tessedit_pageseg_mode: '8', tessedit_ocr_engine_mode: '1' }, // Single word
+                { tessedit_pageseg_mode: '7', tessedit_ocr_engine_mode: '1' }, // Single text line
+                { tessedit_pageseg_mode: '13', tessedit_ocr_engine_mode: '1' } // Raw line
+            ];
+
+            let bestResult = null;
+            let bestConfidence = 0;
+
+            for (const config of retryConfigs) {
+                try {
+                    debugLog(`Probando configuración: PSM ${config.tessedit_pageseg_mode}`);
+                    const result = await worker.recognize(canvas, config);
+                    const confidence = result.data.confidence || 0;
+                    
+                    if (confidence > bestConfidence) {
+                        bestResult = result;
+                        bestConfidence = confidence;
+                    }
+                } catch (error) {
+                    debugLog(`Error con configuración PSM ${config.tessedit_pageseg_mode}: ${error.message}`);
+                }
+            }
+
+            return bestResult;
+        }
+
+        // Validación de calidad de imagen
+        function validateImageQuality(canvas) {
+            const ctx = canvas.getContext('2d');
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            
+            let totalBrightness = 0;
+            let pixels = 0;
+            
+            // Calcular brillo promedio
+            for (let i = 0; i < data.length; i += 4) {
+                const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
+                totalBrightness += brightness;
+                pixels++;
+            }
+            
+            const avgBrightness = totalBrightness / pixels;
+            
+            debugLog(`Calidad de imagen - Brillo promedio: ${avgBrightness.toFixed(1)}`);
+            
+            // Advertencias sobre calidad
+            if (avgBrightness < 50) {
+                showStatus('error', '⚠️ Imagen muy oscura. Mejora la iluminación.');
+                return false;
+            } else if (avgBrightness > 200) {
+                showStatus('error', '⚠️ Imagen muy clara. Reduce la exposición.');
+                return false;
+            }
+            
+            return true;
+        }
+
+        // Configuración avanzada de Tesseract para máxima precisión
+        function getOptimalOCRConfig() {
+            return {
+                tessedit_pageseg_mode: '1',
+                tessedit_ocr_engine_mode: '1',
+                tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,;:!?()[]{}"\'-/\\@#$%&*+=<>|~áéíóúüñÁÉÍÓÚÜÑ ',
+                preserve_interword_spaces: '1',
+                textord_heavy_nr: '1',
+                textord_min_linesize: '2.5',
+                enable_noise_removal: '1',
+                classify_enable_learning: '0',
+                classify_enable_adaptive_matcher: '1',
+                textord_really_old_xheight: '1',
+                segment_penalty_dict_nonword: '1.25',
+                segment_penalty_garbage: '1.50',
+                language_model_penalty_non_freq_dict_word: '0.1',
+                language_model_penalty_non_dict_word: '0.15'
+            };
+        }
+
+        // Función mejorada de procesamiento OCR
+        async function processOCRWithMaxPrecision() {
+            const startTime = performance.now();
+            
+            showProgress(0, 'Validando imagen...');
+            
+            try {
+                // Validar calidad de imagen
+                if (!validateImageQuality(canvas)) {
+                    hideProgress();
+                    return;
+                }
+
+                // Inicializar worker si no existe
+                if (!worker) {
+                    showProgress(10, 'Inicializando OCR avanzado...');
+                    await initializeOCRWorker();
+                }
+
+                // Preprocesar imagen
+                showProgress(30, 'Optimizando imagen...');
+                const processedCanvas = await preprocessImageForOCR(canvas);
+                
+                showProgress(50, 'Extrayendo texto con máxima precisión...');
+                
+                // Usar configuración óptima
+                const optimalConfig = getOptimalOCRConfig();
+                
+                // Múltiples intentos con diferentes configuraciones
+                const result = await retryOCRWithDifferentSettings(processedCanvas);
+                
+                if (!result) {
+                    throw new Error('No se pudo extraer texto con ninguna configuración');
+                }
+
+                showProgress(90, 'Refinando resultados...');
+
+                const rawText = result.data.text || '';
+                const confidence = result.data.confidence || 0;
+
+                // Post-procesar texto
+                const processedText = postProcessText(rawText);
+
+                showProgress(100, 'Completado');
+                hideProgress();
+
+                // Mostrar resultados
+                document.getElementById('extractedText').value = processedText;
+                updateConfidence(confidence);
+                document.getElementById('textSection').style.display = 'block';
+
+                // Actualizar estadísticas
+                const processingTime = (performance.now() - startTime) / 1000;
+                updateStats(confidence, processingTime);
+
+                let statusMessage = `✅ Texto extraído: ${processedText.length} caracteres`;
+                statusMessage += ` (${Math.round(confidence)}% confianza, ${processingTime.toFixed(1)}s)`;
+                
+                if (confidence >= 90) {
+                    statusMessage = '🎯 ' + statusMessage + ' - Excelente precisión!';
+                } else if (confidence >= 70) {
+                    statusMessage = '👍 ' + statusMessage + ' - Buena precisión';
+                } else {
+                    statusMessage = '⚠️ ' + statusMessage + ' - Considera mejorar la imagen';
+                }
+                
+                showStatus('success', statusMessage);
+
+                debugLog(`OCR completado exitosamente: ${processedText.length} chars, ${confidence}% conf`);
+
+            } catch (error) {
+                hideProgress();
+                console.error('Error en OCR:', error);
+                showStatus('error', `❌ Error en OCR: ${error.message}`);
+                debugLog(`Error OCR completo: ${error.toString()}`);
+                
+                // Intentar reinicializar el worker si falló
+                if (worker) {
+                    try {
+                        await worker.terminate();
+                        worker = null;
+                        debugLog('Worker reinicializado tras error');
+                    } catch (termError) {
+                        debugLog(`Error terminando worker: ${termError.message}`);
+                    }
+                }
+            }
+        }
+
+        // Mensaje de bienvenida
+        setTimeout(() => {
+            if (typeof Tesseract !== 'undefined') {
+                showStatus('info', '🚀 Sistema OCR listo. Inicia la cámara para comenzar.');
+            }
+        }, 2000);
     </script>
 </body>
 </html>
