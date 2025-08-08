@@ -22,21 +22,52 @@ def check_dependencies():
         print("Ejecuta: cd backend && python install_dependencies.py")
         return False
     
-    try:
-        from ocr_space_client import OCRSpaceClient
-        print("✅ Cliente OCR.Space disponible")
-    except ImportError as e:
-        print(f"❌ Error: {e}")
-        print("Asegúrate de estar en el directorio backend")
+    return True
+
+def check_ocr_client():
+    """Verificar que el cliente OCR esté disponible"""
+    print("🔍 Verificando cliente OCR.Space...")
+    
+    # Cambiar al directorio backend temporalmente
+    original_dir = os.getcwd()
+    backend_dir = os.path.join(os.path.dirname(__file__), 'backend')
+    
+    if not os.path.exists(backend_dir):
+        print("❌ Error: No se encontró el directorio backend")
         return False
     
-    return True
+    try:
+        os.chdir(backend_dir)
+        sys.path.insert(0, backend_dir)
+        
+        from ocr_space_client import OCRSpaceClient
+        print("✅ Cliente OCR.Space disponible")
+        return True
+    except ImportError as e:
+        print(f"❌ Error: {e}")
+        print("Asegúrate de que el archivo ocr_space_client.py esté en el directorio backend")
+        return False
+    finally:
+        os.chdir(original_dir)
+        if backend_dir in sys.path:
+            sys.path.remove(backend_dir)
 
 def check_api_key():
     """Verificar que la API key esté configurada"""
     print("🔑 Verificando API key de OCR.Space...")
     
+    # Cambiar al directorio backend temporalmente
+    original_dir = os.getcwd()
+    backend_dir = os.path.join(os.path.dirname(__file__), 'backend')
+    
+    if not os.path.exists(backend_dir):
+        print("❌ Error: No se encontró el directorio backend")
+        return False
+    
     try:
+        os.chdir(backend_dir)
+        sys.path.insert(0, backend_dir)
+        
         from ocr_space_client import OCRSpaceClient
         client = OCRSpaceClient()
         
@@ -50,6 +81,10 @@ def check_api_key():
     except Exception as e:
         print(f"❌ Error verificando API key: {e}")
         return False
+    finally:
+        os.chdir(original_dir)
+        if backend_dir in sys.path:
+            sys.path.remove(backend_dir)
 
 def start_server():
     """Iniciar el servidor"""
@@ -66,6 +101,10 @@ def start_server():
     
     # Verificar dependencias
     if not check_dependencies():
+        return False
+    
+    # Verificar cliente OCR
+    if not check_ocr_client():
         return False
     
     # Verificar API key
