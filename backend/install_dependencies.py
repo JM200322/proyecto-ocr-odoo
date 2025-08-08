@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Script para instalar dependencias del proyecto OCR
+Script para instalar dependencias del proyecto OCR con OCR.Space
 """
 
 import subprocess
@@ -19,70 +19,49 @@ def install_python_dependencies():
         return False
     return True
 
-def install_tesseract():
-    """Instalar Tesseract OCR"""
-    system = platform.system().lower()
+def setup_ocr_space():
+    """Configurar OCR.Space API"""
+    print("\n🔑 Configuración de OCR.Space API")
+    print("=" * 40)
+    print("Para usar el sistema OCR necesitas una API key gratuita:")
+    print("1. Ve a https://ocr.space/ocrapi")
+    print("2. Regístrate para obtener una API key gratuita")
+    print("3. Ejecuta: python setup_ocr_space.py")
+    print()
     
-    print(f"Detectado sistema: {system}")
-    
-    if system == "windows":
-        print("⚠️  Para Windows, necesitas instalar Tesseract manualmente:")
-        print("1. Descarga desde: https://github.com/UB-Mannheim/tesseract/wiki")
-        print("2. Instala en C:\\Program Files\\Tesseract-OCR")
-        print("3. Añade C:\\Program Files\\Tesseract-OCR al PATH")
-        return True
-        
-    elif system == "darwin":  # macOS
+    setup_choice = input("¿Quieres configurar OCR.Space ahora? (s/n): ").lower().strip()
+    if setup_choice in ['s', 'si', 'sí', 'y', 'yes']:
         try:
-            print("Instalando Tesseract con Homebrew...")
-            subprocess.check_call(["brew", "install", "tesseract"])
-            print("✅ Tesseract instalado correctamente")
+            subprocess.check_call([sys.executable, "setup_ocr_space.py"])
+            print("✅ OCR.Space configurado correctamente")
             return True
         except subprocess.CalledProcessError:
-            print("❌ Error instalando Tesseract. Asegúrate de tener Homebrew instalado.")
+            print("❌ Error configurando OCR.Space")
             return False
-            
-    elif system == "linux":
-        try:
-            print("Instalando Tesseract...")
-            subprocess.check_call(["sudo", "apt-get", "update"])
-            subprocess.check_call(["sudo", "apt-get", "install", "-y", "tesseract-ocr", "tesseract-ocr-spa"])
-            print("✅ Tesseract instalado correctamente")
-            return True
-        except subprocess.CalledProcessError:
-            print("❌ Error instalando Tesseract. Intenta manualmente:")
-            print("sudo apt-get install tesseract-ocr tesseract-ocr-spa")
-            return False
-    
     else:
-        print(f"⚠️  Sistema no reconocido: {system}")
-        print("Instala Tesseract manualmente desde: https://github.com/tesseract-ocr/tesseract")
+        print("⚠️  Recuerda configurar OCR.Space antes de usar el sistema")
         return True
 
 def verify_installation():
     """Verificar que todo esté instalado correctamente"""
     print("\nVerificando instalación...")
     
-    # Verificar Tesseract
-    try:
-        result = subprocess.run(["tesseract", "--version"], 
-                              capture_output=True, text=True)
-        if result.returncode == 0:
-            print("✅ Tesseract está instalado y funcionando")
-        else:
-            print("❌ Tesseract no está funcionando correctamente")
-            return False
-    except FileNotFoundError:
-        print("❌ Tesseract no está instalado o no está en el PATH")
-        return False
-    
     # Verificar Python dependencies
     try:
         import PIL
-        import pytesseract
+        import requests
         print("✅ Dependencias de Python instaladas correctamente")
     except ImportError as e:
         print(f"❌ Error importando dependencias: {e}")
+        return False
+    
+    # Verificar OCR.Space
+    try:
+        from ocr_space_client import OCRSpaceClient
+        client = OCRSpaceClient()
+        print("✅ OCR.Space client disponible")
+    except ImportError as e:
+        print(f"❌ Error importando OCR.Space client: {e}")
         return False
     
     print("\n🎉 ¡Instalación completada exitosamente!")
@@ -90,7 +69,7 @@ def verify_installation():
     return True
 
 def main():
-    print("🚀 Instalador de dependencias para OCR")
+    print("🚀 Instalador de dependencias para OCR con OCR.Space")
     print("=" * 50)
     
     # Cambiar al directorio del script
@@ -100,7 +79,8 @@ def main():
     if not install_python_dependencies():
         sys.exit(1)
     
-    if not install_tesseract():
+    # Configurar OCR.Space
+    if not setup_ocr_space():
         sys.exit(1)
     
     # Verificar instalación

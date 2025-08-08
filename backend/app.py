@@ -11,6 +11,9 @@ from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 import cv2
 import numpy as np
 
+# Importar el nuevo cliente OCR
+from ocr_space_client import OCRSpaceClient
+
 # Configurar logging detallado
 logging.basicConfig(
     level=logging.INFO,
@@ -21,16 +24,9 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app)
 
-# Verificar e importar Tesseract
-try:
-    import pytesseract
-    # Configurar path de Tesseract si es necesario (Windows)
-    # pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-    TESSERACT_AVAILABLE = True
-    logger.info("✅ Tesseract disponible")
-except ImportError:
-    TESSERACT_AVAILABLE = False
-    logger.warning("⚠️ Tesseract no disponible - se usará texto de prueba")
+# Inicializar cliente OCR.Space
+ocr_client = OCRSpaceClient()
+logger.info("✅ Cliente OCR.Space inicializado")
 
 def preprocess_image_advanced(image, brightness=0, contrast=100, sharpness=0):
     """Preprocesamiento avanzado de imagen para OCR de máxima precisión"""
@@ -96,91 +92,39 @@ def preprocess_image_advanced(image, brightness=0, contrast=100, sharpness=0):
         logger.error(f"❌ Error en preprocesamiento: {e}")
         return image
 
-def extract_text_with_multiple_configs(image):
-    """Extraer texto usando múltiples configuraciones para máxima precisión"""
-    if not TESSERACT_AVAILABLE:
-        return {
-            'text': 'Tesseract no disponible - Texto de ejemplo extraído de la imagen',
-            'confidence': 85.0
-        }
-    
-    # Configuraciones múltiples para diferentes tipos de texto
-    configs = [
-        {
-            'name': 'Documento estándar',
-            'config': '--oem 1 --psm 1 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,;:!?()[]{}"\'-/\\@#$%&*+=<>|~áéíóúüñÁÉÍÓÚÜÑ ',
-            'lang': 'spa+eng'
-        },
-        {
-            'name': 'Bloque de texto uniforme',
-            'config': '--oem 1 --psm 6 -c preserve_interword_spaces=1',
-            'lang': 'spa+eng'
-        },
-        {
-            'name': 'Línea de texto única',
-            'config': '--oem 1 --psm 7',
-            'lang': 'spa+eng'
-        },
-        {
-            'name': 'Palabra única',
-            'config': '--oem 1 --psm 8',
-            'lang': 'spa+eng'
-        }
-    ]
-    
-    best_result = None
-    best_confidence = 0
-    
-    for config in configs:
-        try:
-            logger.info(f"Probando configuración: {config['name']}")
+def extract_text_with_ocr_space(image):
+    """Extraer texto usando OCR.Space API para máxima precisión"""
+    try:
+        # Convertir imagen PIL a bytes
+        img_buffer = io.BytesIO()
+        image.save(img_buffer, format='JPEG', quality=90)
+        image_bytes = img_buffer.getvalue()
+        
+        # Procesar con OCR.Space
+        result = ocr_client.process_image_from_bytes(image_bytes, language="spa", engine=2)
+        
+        if result["success"]:
+            logger.info(f"✅ OCR.Space exitoso: {len(result['text'])} chars, {result['confidence']:.1f}% confianza")
+            return {
+                'text': result['text'],
+                'confidence': result['confidence'],
+                'config_used': 'OCR.Space API',
+                'processing_time': result.get('processing_time', 0)
+            }
+        else:
+            logger.warning(f"❌ OCR.Space falló: {result.get('message', 'Error desconocido')}")
+            return {
+                'text': '',
+                'confidence': 0,
+                'config_used': 'OCR.Space API (falló)'
+            }
             
-            # Extraer texto
-            text = pytesseract.image_to_string(
-                image, 
-                config=config['config'],
-                lang=config['lang']
-            ).strip()
-            
-            # Calcular confianza
-            try:
-                data = pytesseract.image_to_data(
-                    image,
-                    config=config['config'],
-                    lang=config['lang'],
-                    output_type=pytesseract.Output.DICT
-                )
-                
-                confidences = [int(conf) for conf in data['conf'] if int(conf) > 0]
-                confidence = sum(confidences) / len(confidences) if confidences else 0
-                
-            except Exception as conf_error:
-                logger.warning(f"Error calculando confianza: {conf_error}")
-                confidence = len(text) * 2  # Estimación basada en longitud de texto
-            
-            logger.info(f"Resultado: {len(text)} chars, {confidence:.1f}% confianza")
-            
-            # Seleccionar el mejor resultado
-            if confidence > best_confidence and len(text) > 0:
-                best_result = {
-                    'text': text,
-                    'confidence': confidence,
-                    'config_used': config['name']
-                }
-                best_confidence = confidence
-                
-        except Exception as e:
-            logger.warning(f"Error con configuración {config['name']}: {e}")
-    
-    if best_result:
-        logger.info(f"✅ Mejor resultado: {best_result['config_used']} ({best_confidence:.1f}%)")
-        return best_result
-    else:
-        logger.warning("❌ No se pudo extraer texto con ninguna configuración")
+    except Exception as e:
+        logger.error(f"❌ Error en OCR.Space: {e}")
         return {
             'text': '',
             'confidence': 0,
-            'config_used': 'Ninguna exitosa'
+            'config_used': 'OCR.Space API (error)'
         }
 
 def post_process_text(text):
@@ -294,11 +238,11 @@ def process_ocr():
         preprocessing_time = time.time() - preprocessing_start
         logger.info(f"⚡ Preprocesamiento completado en {preprocessing_time:.2f}s")
         
-        # Extraer texto con múltiples configuraciones
+        # Extraer texto con OCR.Space
         ocr_start = time.time()
-        ocr_result = extract_text_with_multiple_configs(processed_image)
+        ocr_result = extract_text_with_ocr_space(processed_image)
         ocr_time = time.time() - ocr_start
-        logger.info(f"🔍 OCR completado en {ocr_time:.2f}s")
+        logger.info(f"🔍 OCR.Space completado en {ocr_time:.2f}s")
         
         # Post-procesar texto
         postprocess_start = time.time()
@@ -320,7 +264,7 @@ def process_ocr():
                 'postprocessing_time': postprocess_time,
                 'config_used': ocr_result.get('config_used', 'Desconocida'),
                 'characters_extracted': len(final_text),
-                'tesseract_available': TESSERACT_AVAILABLE
+                'ocr_space_available': True
             }
         }
         
@@ -341,25 +285,28 @@ def test_connection():
     try:
         # Verificar capacidades del sistema
         capabilities = {
-            'tesseract_available': TESSERACT_AVAILABLE,
+            'ocr_space_available': True,
             'opencv_available': 'cv2' in globals(),
             'pil_available': True,  # Siempre disponible si llegamos aquí
             'server_time': datetime.now().isoformat(),
-            'python_version': os.sys.version
+            'python_version': os.sys.version,
+            'ocr_api_key': ocr_client.api_key[:8] + '...' if ocr_client.api_key else 'No configurado'
         }
         
-        if TESSERACT_AVAILABLE:
-            try:
-                tesseract_version = pytesseract.get_tesseract_version()
-                capabilities['tesseract_version'] = str(tesseract_version)
-                
-                # Probar idiomas disponibles
-                languages = pytesseract.get_languages()
-                capabilities['available_languages'] = languages
-                
-            except Exception as tess_error:
-                logger.warning(f"Error obteniendo info de Tesseract: {tess_error}")
-                capabilities['tesseract_error'] = str(tess_error)
+        # Probar conexión con OCR.Space
+        try:
+            # Crear imagen de prueba simple
+            test_img = Image.new('RGB', (100, 50), color='white')
+            test_result = ocr_client.process_image_from_bytes(
+                test_img.tobytes(), language="spa", engine=2
+            )
+            capabilities['ocr_space_test'] = test_result['success']
+            capabilities['ocr_space_message'] = test_result.get('message', 'Test completado')
+            
+        except Exception as ocr_error:
+            logger.warning(f"Error probando OCR.Space: {ocr_error}")
+            capabilities['ocr_space_test'] = False
+            capabilities['ocr_space_error'] = str(ocr_error)
         
         logger.info("✅ Test de conexión exitoso")
         
@@ -419,7 +366,8 @@ def health_check():
             'success': True,
             'status': 'healthy',
             'timestamp': datetime.now().isoformat(),
-            'tesseract_available': TESSERACT_AVAILABLE
+            'ocr_space_available': True,
+            'ocr_api_key_configured': bool(ocr_client.api_key)
         })
     except Exception as e:
         logger.error(f"Error en health check: {e}")
@@ -430,6 +378,6 @@ def health_check():
         }), 500
 
 if __name__ == '__main__':
-    logger.info("🚀 Iniciando servidor OCR...")
-    logger.info(f"Tesseract disponible: {TESSERACT_AVAILABLE}")
+    logger.info("🚀 Iniciando servidor OCR con OCR.Space...")
+    logger.info(f"API Key configurada: {bool(ocr_client.api_key)}")
     app.run(debug=True, host='0.0.0.0', port=5000)

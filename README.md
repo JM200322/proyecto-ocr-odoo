@@ -2,13 +2,14 @@
 
 Herramienta para escanear documentos con OCR y enviar el texto extraído a Odoo.
 
-## 🆕 Nuevas Características (v2.0)
+## 🆕 Nuevas Características (v3.0) - OCR.Space API
 
-### OCR en Backend
-- **Procesamiento OCR en el servidor** para mayor precisión
-- **Tesseract nativo** en lugar de Tesseract.js
-- **Ajustes de imagen en tiempo real** (brillo, contraste, nitidez)
-- **Mejor rendimiento** y confiabilidad
+### OCR Mejorado con OCR.Space
+- **API OCR.Space** para máxima precisión y confiabilidad
+- **Procesamiento optimizado** con preprocesamiento avanzado
+- **Múltiples motores OCR** (engine 1, 2, 3) para diferentes tipos de documentos
+- **Mejor rendimiento** y estabilidad que Tesseract local
+- **Sin dependencias locales** de Tesseract
 
 ### Mejoras en la Interfaz
 - **Controles de ajuste de imagen** antes del OCR
@@ -54,7 +55,7 @@ Herramienta para escanear documentos con OCR y enviar el texto extraído a Odoo.
 
 ### Requisitos
 - Python 3.7+
-- Tesseract OCR
+- API Key de OCR.Space (gratuita hasta 500 requests/día)
 - Navegador moderno (Chrome, Firefox, Safari)
 - Odoo instalado y funcionando
 
@@ -62,6 +63,7 @@ Herramienta para escanear documentos con OCR y enviar el texto extraído a Odoo.
 ```bash
 cd backend
 python install_dependencies.py
+python setup_ocr_space.py  # Configurar API key de OCR.Space
 ```
 
 ### Instalación Manual
@@ -69,13 +71,20 @@ python install_dependencies.py
 cd backend
 pip install -r requirements.txt
 
-# Instalar Tesseract OCR:
-# Windows: https://github.com/UB-Mannheim/tesseract/wiki
-# macOS: brew install tesseract
-# Linux: sudo apt-get install tesseract-ocr tesseract-ocr-spa
+# Configurar API Key de OCR.Space:
+# 1. Ve a https://ocr.space/ocrapi
+# 2. Regístrate para obtener una API key gratuita
+# 3. Edita backend/ocr_space_client.py y cambia la API_KEY
 ```
 
 ### Ejecutar
+
+**Opción 1 - Script de inicio rápido (recomendado):**
+```bash
+python start_server.py
+```
+
+**Opción 2 - Inicio manual:**
 ```bash
 cd backend
 python app.py
@@ -111,10 +120,11 @@ El backend se ejecuta en `http://localhost:5000` por defecto.
 
 ### OCR
 - Captura de imágenes con cámara
-- **Procesamiento OCR en el servidor** con Tesseract nativo
-- **Ajustes de imagen en tiempo real** (brillo, contraste, nitidez)
+- **Procesamiento OCR con OCR.Space API** para máxima precisión
+- **Preprocesamiento avanzado** de imágenes (escala de grises, contraste, nitidez)
+- **Múltiples motores OCR** (engine 1, 2, 3) para diferentes tipos de documentos
 - Múltiples idiomas (español, inglés)
-- **Mayor precisión** y confiabilidad
+- **Mayor precisión** y confiabilidad que Tesseract local
 
 ### Debugging
 - Modo debug activable con Ctrl+D

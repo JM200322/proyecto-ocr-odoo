@@ -3,44 +3,41 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Herramienta OCR para Odoo - Precisión Máxima v2.0</title>
+    <title>Herramienta OCR para Odoo - OCR.Space API v3.0</title>
     
-    <!-- Cargar Tesseract.js desde múltiples CDNs para máxima confiabilidad -->
     <script>
-        // Función para cargar Tesseract.js con fallbacks
-        async function loadTesseract() {
-            const cdns = [
-                'https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js',
-                'https://unpkg.com/tesseract.js@4.1.1/dist/tesseract.min.js',
-                'https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js'
-            ];
-            
-            for (const cdn of cdns) {
-                try {
-                    await new Promise((resolve, reject) => {
-                        const script = document.createElement('script');
-                        script.src = cdn;
-                        script.onload = resolve;
-                        script.onerror = reject;
-                        document.head.appendChild(script);
-                    });
-                    
-                    if (typeof Tesseract !== 'undefined') {
-                        console.log(`Tesseract.js cargado desde: ${cdn}`);
-                        return true;
+        // Configuración del backend
+        const BACKEND_URL = 'http://localhost:5000';
+        
+        // Función para verificar conexión con el backend
+        async function checkBackendConnection() {
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/health`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
                     }
-                } catch (error) {
-                    console.warn(`Error cargando desde ${cdn}:`, error);
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    console.log('✅ Backend OCR.Space conectado correctamente');
+                    return true;
+                } else {
+                    console.error('❌ Backend no disponible');
+                    return false;
                 }
+            } catch (error) {
+                console.error('❌ Error conectando con backend:', error);
+                return false;
             }
-            return false;
         }
         
-        // Cargar Tesseract al inicio
-        loadTesseract().then(loaded => {
-            if (!loaded) {
+        // Verificar backend al cargar
+        checkBackendConnection().then(connected => {
+            if (!connected) {
                 document.addEventListener('DOMContentLoaded', () => {
-                    showStatus('error', '❌ Error: No se pudo cargar Tesseract.js. Verifica tu conexión a internet.');
+                    showStatus('error', '❌ Error: No se pudo conectar con el servidor OCR. Verifica que el backend esté ejecutándose.');
                 });
             }
         });
@@ -373,8 +370,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📱 OCR Ultra-Preciso v2.0</h1>
-            <p>Extracción inteligente con análisis contextual</p>
+            <h1>📱 OCR Ultra-Preciso v3.0</h1>
+            <p>Extracción inteligente con OCR.Space API</p>
         </div>
 
         <!-- Estadísticas -->
@@ -470,11 +467,11 @@
             <h4 style="color: #2d3748; margin-bottom: 8px;">⌨️ Atajos:</h4>
             <p><strong>Espacio:</strong> Capturar y procesar | <strong>Escape:</strong> Nueva foto</p>
             
-            <h4 style="color: #2d3748; margin: 15px 0 8px 0;">🆕 Nuevas características v2.0:</h4>
-            <p>• Detección automática de tipo de documento</p>
-            <p>• Configuración OCR adaptativa</p>
-            <p>• Post-procesamiento contextual inteligente</p>
-            <p>• Corrección automática de orientación</p>
+            <h4 style="color: #2d3748; margin: 15px 0 8px 0;">🆕 Nuevas características v3.0:</h4>
+            <p>• OCR.Space API para máxima precisión</p>
+            <p>• Procesamiento en servidor optimizado</p>
+            <p>• Preprocesamiento avanzado de imágenes</p>
+            <p>• Múltiples motores OCR (engine 1, 2, 3)</p>
         </div>
     </div>
 
@@ -486,7 +483,6 @@
         let video, canvas, ctx;
         let stream = null;
         let currentCamera = 'environment';
-        let worker = null;
         let isProcessing = false;
         let debugMode = false;
         
@@ -497,610 +493,15 @@
             timeSum: 0
         };
 
-        // Diccionarios para corrección contextual
-        const SPANISH_DICTIONARY = {
-            common_words: ['el', 'la', 'de', 'que', 'y', 'a', 'en', 'un', 'es', 'se', 'no', 'te', 'lo', 'le', 'da', 'su', 'por', 'son', 'con', 'para', 'al', 'del', 'los', 'una', 'mi', 'me', 'si', 'muy', 'más', 'ser', 'hasta', 'sobre', 'como', 'pero', 'todo', 'esta', 'está', 'cuando', 'desde', 'donde', 'tiene', 'cada', 'fue', 'puede', 'porque', 'hacer', 'entre', 'sin', 'mucho', 'había', 'sido', 'durante', 'tiempo', 'mismo', 'después', 'forma', 'tanto', 'lugar', 'año', 'años', 'trabajo', 'vida', 'manera', 'casa', 'mundo', 'país', 'parte', 'grupo', 'número', 'problema', 'momento', 'caso', 'estado', 'empresa', 'sistema', 'gobierno', 'servicio', 'proyecto', 'persona', 'personas', 'desarrollo', 'información', 'programa', 'proceso', 'mercado', 'producto', 'cliente', 'precio', 'ciudad', 'centro', 'orden', 'punto', 'nivel', 'historia', 'resultado', 'razón', 'nombre', 'valor', 'área', 'tipo', 'sector', 'modelo', 'ejemplo', 'precio', 'total', 'cantidad', 'fecha', 'hora', 'dirección'],
-            corrections: {
-                // Correcciones comunes de OCR
-                '0': { contexts: ['letter'], replacement: 'O' },
-                '1': { contexts: ['letter'], replacement: 'I' },
-                '5': { contexts: ['letter'], replacement: 'S' },
-                '8': { contexts: ['letter'], replacement: 'B' },
-                '|': { contexts: ['all'], replacement: 'I' },
-                '`': { contexts: ['all'], replacement: "'" },
-                '´': { contexts: ['all'], replacement: "'" }
-            }
-        };
 
-        // Patrones para diferentes tipos de documentos
-        const DOCUMENT_PATTERNS = {
-            invoice: {
-                keywords: ['factura', 'invoice', 'total', 'subtotal', 'iva', 'tax', 'importe', 'cantidad', 'precio', 'fecha', 'número'],
-                structure: ['header', 'items', 'totals'],
-                corrections: [
-                    { pattern: /\bF[4A]CTURA\b/gi, replacement: 'FACTURA' },
-                    { pattern: /\b[0O]€\b/g, replacement: '0€' },
-                    { pattern: /\bT[0O]TAL\b/gi, replacement: 'TOTAL' },
-                    { pattern: /\bSUBT[0O]TAL\b/gi, replacement: 'SUBTOTAL' },
-                    { pattern: /\bIV[4A]\b/gi, replacement: 'IVA' },
-                    { pattern: /\bC[4A]NTIDAD\b/gi, replacement: 'CANTIDAD' }
-                ]
-            },
-            form: {
-                keywords: ['nombre', 'apellido', 'dirección', 'teléfono', 'email', 'fecha', 'firma', 'dni', 'nif'],
-                structure: ['fields', 'values'],
-                corrections: [
-                    { pattern: /\bN[0O]MBRE\b/gi, replacement: 'NOMBRE' },
-                    { pattern: /\bFECH[4A]\b/gi, replacement: 'FECHA' },
-                    { pattern: /\bDIRECCI[0O]N\b/gi, replacement: 'DIRECCIÓN' },
-                    { pattern: /\bTEL[EÉ]F[0O]N[0O]\b/gi, replacement: 'TELÉFONO' }
-                ]
-            },
-            letter: {
-                keywords: ['estimado', 'dear', 'saludo', 'atentamente', 'cordialmente', 'asunto', 'subject'],
-                structure: ['header', 'body', 'signature'],
-                corrections: [
-                    { pattern: /\bESTIM[4A]D[0O]\b/gi, replacement: 'ESTIMADO' },
-                    { pattern: /\b[4A]TENTAMENTE\b/gi, replacement: 'ATENTAMENTE' },
-                    { pattern: /\bC[0O]RDIALMENTE\b/gi, replacement: 'CORDIALMENTE' }
-                ]
-            },
-            contract: {
-                keywords: ['contrato', 'contract', 'cláusula', 'partes', 'firmante', 'condiciones', 'términos'],
-                structure: ['title', 'parties', 'clauses', 'signatures'],
-                corrections: [
-                    { pattern: /\bC[0O]NTR[4A]T[0O]\b/gi, replacement: 'CONTRATO' },
-                    { pattern: /\bCL[4Á]USUL[4A]\b/gi, replacement: 'CLÁUSULA' },
-                    { pattern: /\bC[0O]NDICI[0O]NES\b/gi, replacement: 'CONDICIONES' }
-                ]
-            },
-            general: {
-                keywords: [],
-                structure: ['paragraphs'],
-                corrections: [
-                    { pattern: /\b[1I]nterés\b/gi, replacement: 'interés' },
-                    { pattern: /\b[0O]bservaciones\b/gi, replacement: 'observaciones' },
-                    { pattern: /\bInf[0o]rmaci[0o]n\b/gi, replacement: 'información' }
-                ]
-            }
-        };
 
-        // =====================================================
-        // ANÁLISIS DE IMAGEN Y DETECCIÓN DE DOCUMENTO
-        // =====================================================
 
-        async function analyzeImage(canvas) {
-            debugLog('=== INICIANDO ANÁLISIS DE IMAGEN ===');
-            
-            const analysis = {
-                textDensity: calculateTextDensity(canvas),
-                hasTabularData: detectTables(canvas),
-                documentType: detectDocumentType(canvas),
-                textRegions: detectTextRegions(canvas),
-                imageQuality: assessImageQuality(canvas),
-                orientation: await detectTextOrientation(canvas)
-            };
-            
-            debugLog(`Análisis completado: ${JSON.stringify(analysis, null, 2)}`);
-            return analysis;
-        }
 
-        function detectDocumentType(canvas) {
-            // Análisis básico basado en layout y estructura
-            const ctx = canvas.getContext('2d');
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            
-            // Simular detección de tipo (en implementación real usaríamos ML)
-            const aspectRatio = canvas.width / canvas.height;
-            const pixelDensity = canvas.width * canvas.height;
-            
-            // Heurísticas simples para determinar tipo
-            if (aspectRatio > 1.3 && pixelDensity > 500000) {
-                return 'invoice'; // Documentos horizontales grandes
-            } else if (aspectRatio < 0.8) {
-                return 'form'; // Documentos verticales
-            } else if (pixelDensity > 800000) {
-                return 'contract'; // Documentos grandes
-            } else {
-                return 'general';
-            }
-        }
 
-        function calculateTextDensity(canvas) {
-            // Calcular densidad de texto estimada
-            const ctx = canvas.getContext('2d');
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const data = imageData.data;
-            
-            let textPixels = 0;
-            let totalPixels = data.length / 4;
-            
-            for (let i = 0; i < data.length; i += 4) {
-                const r = data[i];
-                const g = data[i + 1];
-                const b = data[i + 2];
-                const brightness = (r + g + b) / 3;
-                
-                // Considerar píxeles oscuros como posible texto
-                if (brightness < 128) {
-                    textPixels++;
-                }
-            }
-            
-            return textPixels / totalPixels;
-        }
 
-        function detectTables(canvas) {
-            // Detección básica de estructuras tabulares
-            const ctx = canvas.getContext('2d');
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            
-            // Buscar líneas horizontales y verticales regulares
-            // Implementación simplificada - en producción usaríamos algoritmos más sofisticados
-            return Math.random() > 0.7; // Simulación temporal
-        }
 
-        function detectTextRegions(canvas) {
-            // Detectar regiones que contienen texto
-            const regions = [];
-            const ctx = canvas.getContext('2d');
-            
-            // Dividir canvas en regiones y analizar cada una
-            const regionWidth = canvas.width / 4;
-            const regionHeight = canvas.height / 4;
-            
-            for (let row = 0; row < 4; row++) {
-                for (let col = 0; col < 4; col++) {
-                    const x = col * regionWidth;
-                    const y = row * regionHeight;
-                    
-                    const regionData = ctx.getImageData(x, y, regionWidth, regionHeight);
-                    const hasText = analyzeRegionForText(regionData);
-                    
-                    if (hasText) {
-                        regions.push({ x, y, width: regionWidth, height: regionHeight });
-                    }
-                }
-            }
-            
-            return regions;
-        }
 
-        function analyzeRegionForText(imageData) {
-            const data = imageData.data;
-            let darkPixels = 0;
-            
-            for (let i = 0; i < data.length; i += 4) {
-                const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
-                if (brightness < 100) darkPixels++;
-            }
-            
-            const density = darkPixels / (data.length / 4);
-            return density > 0.1 && density < 0.8; // Rango típico para texto
-        }
 
-        async function detectTextOrientation(canvas) {
-            // Detección simplificada de orientación
-            // En implementación real usaríamos análisis de líneas de texto
-            return 0; // Asumir orientación correcta por ahora
-        }
-
-        function assessImageQuality(canvas) {
-            const ctx = canvas.getContext('2d');
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const data = imageData.data;
-            
-            let totalBrightness = 0;
-            let pixels = 0;
-            
-            for (let i = 0; i < data.length; i += 4) {
-                const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
-                totalBrightness += brightness;
-                pixels++;
-            }
-            
-            const avgBrightness = totalBrightness / pixels;
-            
-            return {
-                brightness: avgBrightness,
-                quality: avgBrightness > 50 && avgBrightness < 200 ? 'good' : 'poor'
-            };
-        }
-
-        // =====================================================
-        // PREPROCESAMIENTO AVANZADO DE IMAGEN
-        // =====================================================
-
-        async function preprocessImageForOCR(sourceCanvas) {
-            debugLog('=== INICIANDO PREPROCESAMIENTO AVANZADO ===');
-            
-            // PASO 1: Detectar y corregir orientación
-            showProgress(25, 'Corrigiendo orientación...');
-            const orientationCorrected = await detectAndCorrectOrientation(sourceCanvas);
-            
-            // PASO 2: Detección y eliminación de sombras
-            showProgress(30, 'Eliminando sombras...');
-            const shadowCorrected = removeShadows(orientationCorrected);
-            
-            // PASO 3: Segmentación inteligente
-            showProgress(35, 'Detectando regiones de texto...');
-            const textRegions = detectTextRegions(shadowCorrected);
-            
-            // PASO 4: Filtros adaptativos
-            showProgress(40, 'Aplicando filtros optimizados...');
-            const finalProcessed = applyAdaptiveFilters(shadowCorrected, textRegions);
-            
-            debugLog('Preprocesamiento completado');
-            return finalProcessed;
-        }
-
-        async function detectAndCorrectOrientation(canvas) {
-            // Por ahora retornar sin cambios, implementación futura
-            return canvas;
-        }
-
-        function removeShadows(canvas) {
-            const processedCanvas = document.createElement('canvas');
-            processedCanvas.width = canvas.width;
-            processedCanvas.height = canvas.height;
-            const ctx = processedCanvas.getContext('2d');
-            
-            // Aplicar corrección de sombras básica
-            ctx.filter = 'brightness(110%) contrast(120%)';
-            ctx.drawImage(canvas, 0, 0);
-            
-            return processedCanvas;
-        }
-
-        function applyAdaptiveFilters(canvas, textRegions) {
-            const processedCanvas = document.createElement('canvas');
-            processedCanvas.width = canvas.width;
-            processedCanvas.height = canvas.height;
-            const processedCtx = processedCanvas.getContext('2d');
-
-            // Aplicar filtros mejorados
-            processedCtx.filter = 'contrast(150%) brightness(110%) saturate(0%)';
-            processedCtx.drawImage(canvas, 0, 0);
-
-            // Procesamiento pixel por pixel mejorado
-            const imageData = processedCtx.getImageData(0, 0, processedCanvas.width, processedCanvas.height);
-            const data = imageData.data;
-
-            for (let i = 0; i < data.length; i += 4) {
-                const r = data[i];
-                const g = data[i + 1];
-                const b = data[i + 2];
-                
-                // Convertir a escala de grises con pesos optimizados
-                const gray = r * 0.299 + g * 0.587 + b * 0.114;
-                
-                // Umbralización adaptativa mejorada
-                const threshold = calculateAdaptiveThreshold(data, i, processedCanvas.width);
-                const finalValue = gray > threshold ? 255 : 0;
-                
-                data[i] = finalValue;     // R
-                data[i + 1] = finalValue; // G
-                data[i + 2] = finalValue; // B
-            }
-
-            processedCtx.putImageData(imageData, 0, 0);
-            debugLog('Filtros adaptativos aplicados');
-            
-            return processedCanvas;
-        }
-
-        function calculateAdaptiveThreshold(data, pixelIndex, width) {
-            // Calcular umbral adaptativo basado en vecindario
-            const neighborhood = [];
-            const pixelRow = Math.floor(pixelIndex / 4 / width);
-            const pixelCol = (pixelIndex / 4) % width;
-            
-            // Examinar píxeles vecinos en un área 5x5
-            for (let dr = -2; dr <= 2; dr++) {
-                for (let dc = -2; dc <= 2; dc++) {
-                    const newRow = pixelRow + dr;
-                    const newCol = pixelCol + dc;
-                    
-                    if (newRow >= 0 && newRow < Math.floor(data.length / 4 / width) && 
-                        newCol >= 0 && newCol < width) {
-                        const neighborIndex = (newRow * width + newCol) * 4;
-                        if (neighborIndex < data.length) {
-                            const neighborGray = data[neighborIndex] * 0.299 + 
-                                               data[neighborIndex + 1] * 0.587 + 
-                                               data[neighborIndex + 2] * 0.114;
-                            neighborhood.push(neighborGray);
-                        }
-                    }
-                }
-            }
-            
-            if (neighborhood.length === 0) return 128;
-            
-            // Calcular umbral como promedio del vecindario
-            const avgNeighborhood = neighborhood.reduce((a, b) => a + b, 0) / neighborhood.length;
-            return avgNeighborhood * 0.9; // Ajustar umbral ligeramente hacia abajo
-        }
-
-        // =====================================================
-        // CONFIGURACIONES DINÁMICAS DE OCR
-        // =====================================================
-
-        function getOptimalOCRConfig(imageAnalysis) {
-            debugLog('=== CONFIGURANDO OCR DINÁMICAMENTE ===');
-            
-            const documentType = imageAnalysis.documentType;
-            const textDensity = imageAnalysis.textDensity;
-            const hasTabularData = imageAnalysis.hasTabularData;
-            
-            let config = {
-                tessedit_ocr_engine_mode: '1',
-                preserve_interword_spaces: '1',
-                textord_heavy_nr: '1',
-                classify_enable_learning: '0',
-                classify_enable_adaptive_matcher: '1'
-            };
-            
-            // Configuraciones específicas por tipo de documento
-            if (documentType === 'invoice') {
-                config.tessedit_pageseg_mode = '6'; // Uniform text block
-                config.tessedit_char_whitelist = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,;:€$%/-()[]';
-                config.textord_tabfind_find_tables = '1';
-                debugLog('Configuración optimizada para FACTURA');
-                
-            } else if (documentType === 'form') {
-                config.tessedit_pageseg_mode = '12'; // Sparse text
-                config.preserve_interword_spaces = '0';
-                config.tessedit_char_whitelist = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,;:-()[]áéíóúüñÁÉÍÓÚÜÑ ';
-                debugLog('Configuración optimizada para FORMULARIO');
-                
-            } else if (documentType === 'contract') {
-                config.tessedit_pageseg_mode = '1'; // Auto with OSD
-                config.textord_min_linesize = '2.5';
-                config.language_model_penalty_non_dict_word = '0.15';
-                debugLog('Configuración optimizada para CONTRATO');
-                
-            } else if (hasTabularData) {
-                config.tessedit_pageseg_mode = '6';
-                config.textord_tabfind_find_tables = '1';
-                config.preserve_interword_spaces = '0';
-                debugLog('Configuración optimizada para DATOS TABULARES');
-                
-            } else if (textDensity < 0.3) {
-                config.tessedit_pageseg_mode = '11'; // Sparse text
-                config.textord_heavy_nr = '0';
-                debugLog('Configuración optimizada para TEXTO DISPERSO');
-                
-            } else {
-                config.tessedit_pageseg_mode = '1'; // Auto with OSD
-                debugLog('Configuración GENERAL');
-            }
-            
-            // Ajustes adicionales basados en calidad de imagen
-            if (imageAnalysis.imageQuality.quality === 'poor') {
-                config.tessedit_write_images = '1';
-                config.classify_enable_adaptive_matcher = '0';
-                debugLog('Ajustes para imagen de BAJA CALIDAD');
-            }
-            
-            debugLog(`Configuración final: ${JSON.stringify(config, null, 2)}`);
-            return config;
-        }
-
-        // =====================================================
-        // POST-PROCESAMIENTO CONTEXTUAL AVANZADO
-        // =====================================================
-
-        function postProcessText(text, documentType, confidence) {
-            if (!text) return '';
-            
-            debugLog('=== INICIANDO POST-PROCESAMIENTO CONTEXTUAL ===');
-            debugLog(`Tipo: ${documentType}, Confianza: ${confidence}%, Texto original: ${text.length} chars`);
-
-            let processed = text;
-            
-            // PASO 1: Limpieza básica mejorada
-            processed = basicTextCleaning(processed);
-            
-            // PASO 2: Corrección contextual según tipo de documento
-            processed = contextualCorrection(processed, documentType);
-            
-            // PASO 3: Corrección ortográfica inteligente
-            processed = intelligentSpellCheck(processed);
-            
-            // PASO 4: Estructuración automática
-            processed = autoStructure(processed, documentType);
-            
-            // PASO 5: Validación final y limpieza
-            processed = finalValidation(processed, confidence);
-            
-            debugLog(`Post-procesamiento completado: ${processed.length} chars`);
-            return processed;
-        }
-
-        function basicTextCleaning(text) {
-            let cleaned = text;
-            
-            // Eliminar caracteres de control y espacios extraños
-            cleaned = cleaned.replace(/[\x00-\x1F\x7F]/g, '');
-            
-            // Normalizar espacios
-            cleaned = cleaned.replace(/\s+/g, ' ');
-            
-            // Eliminar líneas vacías múltiples
-            cleaned = cleaned.replace(/\n\s*\n\s*\n/g, '\n\n');
-            
-            // Corregir puntuación pegada
-            cleaned = cleaned.replace(/([a-záéíóúüñ])([.,:;!?])/gi, '$1$2');
-            cleaned = cleaned.replace(/([.,:;!?])([A-ZÁÉÍÓÚÜÑ])/g, '$1 $2');
-            
-            return cleaned.trim();
-        }
-
-        function contextualCorrection(text, documentType) {
-            const documentPatterns = DOCUMENT_PATTERNS[documentType] || DOCUMENT_PATTERNS.general;
-            let corrected = text;
-            
-            // Aplicar correcciones específicas del tipo de documento
-            documentPatterns.corrections.forEach(correction => {
-                corrected = corrected.replace(correction.pattern, correction.replacement);
-            });
-            
-            // Correcciones generales de OCR
-            const generalCorrections = [
-                // Números comúnmente mal reconocidos
-                { pattern: /\b[0O][0O]\b/g, replacement: '00' },
-                { pattern: /\b[1I][0O]\b/g, replacement: '10' },
-                { pattern: /\b[2Z][0O]\b/g, replacement: '20' },
-                
-                // Letras comúnmente mal reconocidas
-                { pattern: /\brn\b/g, replacement: 'm' },
-                { pattern: /\bvv\b/g, replacement: 'w' },
-                { pattern: /\bcl\b/g, replacement: 'd' },
-                
-                // Caracteres especiales
-                { pattern: /\|\|/g, replacement: 'll' },
-                { pattern: /\|/g, replacement: 'l' },
-                { pattern: /¨/g, replacement: '"' },
-                { pattern: /`/g, replacement: "'" },
-                { pattern: /´/g, replacement: "'" }
-            ];
-            
-            generalCorrections.forEach(correction => {
-                corrected = corrected.replace(correction.pattern, correction.replacement);
-            });
-            
-            return corrected;
-        }
-
-        function intelligentSpellCheck(text) {
-            const words = text.split(/\s+/);
-            const correctedWords = words.map(word => {
-                const cleanWord = word.replace(/[^\w]/g, '').toLowerCase();
-                
-                // Solo corregir si la palabra no está en el diccionario común
-                if (cleanWord.length > 2 && !SPANISH_DICTIONARY.common_words.includes(cleanWord)) {
-                    return correctWord(word, cleanWord);
-                }
-                return word;
-            });
-            
-            return correctedWords.join(' ');
-        }
-
-        function correctWord(originalWord, cleanWord) {
-            // Correcciones comunes basadas en distancia de edición
-            const commonCorrections = {
-                'recibo': ['recib0', 'recib©', 'rec1bo'],
-                'número': ['numer0', 'num3ro', 'nûmero'],
-                'fecha': ['fech4', 'f3cha', 'fecha'],
-                'total': ['t0tal', 'to†al', 'tota1'],
-                'precio': ['preci0', 'pr3cio', 'precio'],
-                'cantidad': ['cantid4d', 'c4ntidad', 'cantidad'],
-                'cliente': ['c1iente', 'clien†e', 'cliente'],
-                'empresa': ['empr3sa', 'empresâ', 'empresa'],
-                'dirección': ['direcci0n', 'direccion', 'dirección'],
-                'teléfono': ['telefon0', '†elefono', 'teléfono']
-            };
-            
-            // Buscar coincidencias
-            for (const [correct, variants] of Object.entries(commonCorrections)) {
-                if (variants.some(variant => variant.toLowerCase() === cleanWord)) {
-                    return originalWord.replace(new RegExp(cleanWord, 'gi'), correct);
-                }
-            }
-            
-            return originalWord;
-        }
-
-        function autoStructure(text, documentType) {
-            let structured = text;
-            
-            // Detectar y formatear números y fechas
-            structured = formatNumbersAndDates(structured);
-            
-            // Estructurar según tipo de documento
-            if (documentType === 'invoice') {
-                structured = structureInvoice(structured);
-            } else if (documentType === 'form') {
-                structured = structureForm(structured);
-            } else {
-                structured = structureGeneral(structured);
-            }
-            
-            return structured;
-        }
-
-        function formatNumbersAndDates(text) {
-            let formatted = text;
-            
-            // Formatear fechas (DD/MM/YYYY, DD-MM-YYYY)
-            formatted = formatted.replace(/\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/g, '$1/$2/$3');
-            
-            // Formatear números con decimales
-            formatted = formatted.replace(/\b(\d+)[,.](\d{2})\s*€\b/g, '$1,$2 €');
-            formatted = formatted.replace(/\b(\d+)[,.](\d{2})\s*\$\b/g, '$1.$2 $');
-            
-            // Formatear códigos postales
-            formatted = formatted.replace(/\b(\d{5})\b/g, '$1');
-            
-            return formatted;
-        }
-
-        function structureInvoice(text) {
-            // Estructurar facturas con secciones identificables
-            let structured = text;
-            
-            // Identificar secciones comunes de facturas
-            structured = structured.replace(/\b(FACTURA|INVOICE)\b/gi, '\n=== $1 ===\n');
-            structured = structured.replace(/\b(TOTAL|SUBTOTAL|IVA|TAX)\s*:?\s*([0-9.,]+\s*[€$]?)/gi, '\n$1: $2');
-            structured = structured.replace(/\b(FECHA|DATE)\s*:?\s*([0-9\/\-]+)/gi, '\n$1: $2');
-            
-            return structured;
-        }
-
-        function structureForm(text) {
-            // Estructurar formularios con campos y valores
-            let structured = text;
-            
-            // Detectar campos de formulario
-            const formFields = ['NOMBRE', 'APELLIDO', 'DIRECCIÓN', 'TELÉFONO', 'EMAIL', 'FECHA', 'DNI', 'NIF'];
-            
-            formFields.forEach(field => {
-                const regex = new RegExp(`\\b(${field})\\s*:?\\s*([A-Za-z0-9@._\\s-]+)`, 'gi');
-                structured = structured.replace(regex, `\n${field}: $2`);
-            });
-            
-            return structured;
-        }
-
-        function structureGeneral(text) {
-            // Estructurar texto general mejorando párrafos
-            let structured = text;
-            
-            // Mejorar separación de párrafos
-            structured = structured.replace(/\.\s*([A-ZÁÉÍÓÚÜÑ])/g, '.\n\n$1');
-            
-            // Detectar listas
-            structured = structured.replace(/^(\d+[\.\)]|\-|\*)\s*/gm, '\n$1 ');
-            
-            return structured;
-        }
-
-        function finalValidation(text, confidence) {
-            let validated = text;
-            
-            // Si la confianza es baja, mantener formato más conservador
-            if (confidence < 70) {
-                // Menos procesamiento agresivo para texto de baja confianza
-                validated = validated.replace(/\n{3,}/g, '\n\n');
-            }
-            
-            // Limpieza final
-            validated = validated.replace(/^\s+|\s+$/g, '');
-            validated = validated.replace(/\n\s*\n\s*\n/g, '\n\n');
-            
-            return validated;
-        }
 
         // =====================================================
         // FUNCIONES PRINCIPALES MODIFICADAS
@@ -1113,25 +514,30 @@
             ctx = canvas.getContext('2d');
             
             initKeyboardShortcuts();
-            checkTesseractAvailability();
+            checkBackendAvailability();
         });
 
-        function checkTesseractAvailability() {
-            const checkInterval = setInterval(() => {
-                if (typeof Tesseract !== 'undefined') {
-                    clearInterval(checkInterval);
-                    showStatus('success', '✅ Tesseract.js cargado correctamente. Sistema OCR v2.0 listo.');
-                    debugLog('Tesseract.js disponible - versión avanzada');
-                } else {
-                    showStatus('info', '⏳ Cargando sistema OCR avanzado...');
+        function checkBackendAvailability() {
+            const checkInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`${BACKEND_URL}/api/health`);
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        clearInterval(checkInterval);
+                        showStatus('success', '✅ Backend OCR.Space conectado. Sistema OCR v3.0 listo.');
+                        debugLog('Backend OCR.Space disponible - versión avanzada');
+                    } else {
+                        showStatus('info', '⏳ Conectando con servidor OCR.Space...');
+                    }
+                } catch (error) {
+                    showStatus('info', '⏳ Conectando con servidor OCR.Space...');
                 }
-            }, 500);
+            }, 1000);
 
             setTimeout(() => {
-                if (typeof Tesseract === 'undefined') {
-                    clearInterval(checkInterval);
-                    showStatus('error', '❌ Error: No se pudo cargar el sistema OCR. Verifica tu conexión.');
-                }
+                clearInterval(checkInterval);
+                showStatus('error', '❌ Error: No se pudo conectar con el servidor OCR. Verifica que el backend esté ejecutándose.');
             }, 10000);
         }
 
@@ -1178,7 +584,7 @@
                 document.getElementById('flipBtn').disabled = false;
                 document.getElementById('captureBtn').disabled = false;
                 
-                showStatus('info', '📷 Cámara activa. Sistema OCR v2.0 preparado para análisis inteligente.');
+                showStatus('info', '📷 Cámara activa. Sistema OCR v3.0 preparado para análisis con OCR.Space.');
                 debugLog(`Cámara iniciada: ${video.videoWidth}x${video.videoHeight}`);
                 
             } catch (error) {
@@ -1222,12 +628,20 @@
             }
         }
 
-        // Captura y procesamiento OCR MEJORADO
+        // Captura y procesamiento OCR CON BACKEND
         async function captureAndProcess() {
             if (!stream || isProcessing) return;
 
-            if (typeof Tesseract === 'undefined') {
-                showStatus('error', '❌ Sistema OCR no disponible. Recarga la página.');
+            // Verificar conexión con backend
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/health`);
+                const data = await response.json();
+                if (!data.success) {
+                    showStatus('error', '❌ Servidor OCR no disponible. Verifica que el backend esté ejecutándose.');
+                    return;
+                }
+            } catch (error) {
+                showStatus('error', '❌ No se pudo conectar con el servidor OCR. Verifica la conexión.');
                 return;
             }
 
@@ -1277,70 +691,60 @@
             }
         }
 
-        // FUNCIÓN PRINCIPAL DE PROCESAMIENTO OCR AVANZADO
+        // FUNCIÓN PRINCIPAL DE PROCESAMIENTO OCR CON BACKEND
         async function processOCRWithAdvancedSystem() {
             const startTime = performance.now();
             
-            showProgress(0, 'Iniciando análisis inteligente...');
+            showProgress(0, 'Iniciando procesamiento con OCR.Space...');
             
             try {
-                // PASO 1: Análisis previo de la imagen
-                showProgress(5, 'Analizando tipo de documento...');
-                const imageAnalysis = await analyzeImage(canvas);
+                // PASO 1: Preparar imagen para envío
+                showProgress(10, 'Preparando imagen...');
+                const imageData = canvas.toDataURL('image/jpeg', 0.9);
                 
-                // Mostrar tipo de documento detectado
-                document.getElementById('documentType').textContent = 
-                    imageAnalysis.documentType.toUpperCase();
-                document.getElementById('documentTypeIndicator').style.display = 'block';
+                // PASO 2: Enviar al backend
+                showProgress(30, 'Enviando al servidor OCR.Space...');
+                const response = await fetch(`${BACKEND_URL}/api/process-ocr`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        image_data: imageData,
+                        brightness: 0,
+                        contrast: 100,
+                        sharpness: 0
+                    })
+                });
                 
-                debugLog(`Documento detectado: ${imageAnalysis.documentType}`);
-
-                // PASO 2: Validar calidad de imagen
-                showProgress(10, 'Validando calidad de imagen...');
-                if (!validateImageQuality(canvas)) {
-                    hideProgress();
-                    return;
+                if (!response.ok) {
+                    throw new Error(`Error del servidor: ${response.status}`);
                 }
-
-                // PASO 3: Inicializar worker si no existe
-                if (!worker) {
-                    showProgress(15, 'Inicializando sistema OCR avanzado...');
-                    await initializeOCRWorker();
+                
+                const result = await response.json();
+                
+                if (!result.success) {
+                    throw new Error(result.message || 'Error en el procesamiento OCR');
                 }
-
-                // PASO 4: Preprocesamiento avanzado
-                showProgress(20, 'Optimizando imagen inteligentemente...');
-                const processedCanvas = await preprocessImageForOCR(canvas);
                 
-                // PASO 5: Configuración dinámica
-                showProgress(45, 'Configurando OCR para este tipo de documento...');
-                const optimalConfig = getOptimalOCRConfig(imageAnalysis);
+                showProgress(90, 'Procesando resultados...');
                 
-                // PASO 6: OCR con configuración optimizada
-                showProgress(50, 'Extrayendo texto con máxima precisión...');
-                const result = await worker.recognize(processedCanvas, optimalConfig);
+                // PASO 3: Mostrar resultados
+                const processedText = result.text || '';
+                const confidence = result.confidence || 0;
+                const processingTime = result.processing_time || 0;
                 
-                if (!result || !result.data) {
-                    throw new Error('No se pudo extraer texto del documento');
-                }
-
-                // PASO 7: Post-procesamiento contextual
-                showProgress(85, 'Limpiando y estructurando texto...');
-                const rawText = result.data.text || '';
-                const confidence = result.data.confidence || 0;
+                document.getElementById('extractedText').value = processedText;
+                updateConfidence(confidence);
+                document.getElementById('textSection').style.display = 'block';
                 
-                const processedText = postProcessText(rawText, imageAnalysis.documentType, confidence);
+                // Ocultar indicador de tipo de documento (no disponible en backend)
+                document.getElementById('documentTypeIndicator').style.display = 'none';
 
                 showProgress(100, 'Completado');
                 hideProgress();
 
-                // Mostrar resultados
-                document.getElementById('extractedText').value = processedText;
-                updateConfidence(confidence);
-                document.getElementById('textSection').style.display = 'block';
-
                 // Actualizar estadísticas
-                const processingTime = (performance.now() - startTime) / 1000;
                 updateStats(confidence, processingTime);
 
                 // Mensaje de estado mejorado
@@ -1357,50 +761,17 @@
                 
                 showStatus('success', statusMessage);
                 debugLog(`=== PROCESAMIENTO COMPLETADO EXITOSAMENTE ===`);
+                debugLog(`Detalles del procesamiento: ${JSON.stringify(result.details)}`);
 
             } catch (error) {
                 hideProgress();
-                console.error('Error en OCR avanzado:', error);
+                console.error('Error en OCR con backend:', error);
                 showStatus('error', `❌ Error en procesamiento: ${error.message}`);
                 debugLog(`Error completo: ${error.toString()}`);
-                
-                // Reinicializar worker si falló
-                if (worker) {
-                    try {
-                        await worker.terminate();
-                        worker = null;
-                        debugLog('Worker reinicializado tras error');
-                    } catch (termError) {
-                        debugLog(`Error terminando worker: ${termError.message}`);
-                    }
-                }
             }
         }
 
-        async function initializeOCRWorker() {
-            try {
-                debugLog('Inicializando worker OCR avanzado...');
-                
-                worker = await Tesseract.createWorker({
-                    logger: m => {
-                        if (m.status === 'recognizing text') {
-                            const progress = 50 + (m.progress * 35); // 50-85%
-                            showProgress(progress, `Reconociendo texto: ${Math.round(m.progress * 100)}%`);
-                        }
-                        debugLog(`Tesseract: ${m.status} - ${m.progress || ''}`);
-                    }
-                });
 
-                await worker.loadLanguage('spa+eng');
-                await worker.initialize('spa+eng');
-
-                debugLog('Worker OCR avanzado inicializado correctamente');
-                
-            } catch (error) {
-                debugLog(`Error inicializando worker: ${error.message}`);
-                throw new Error(`Error al inicializar OCR: ${error.message}`);
-            }
-        }
 
         function validateImageQuality(canvas) {
             const ctx = canvas.getContext('2d');
@@ -1595,196 +966,38 @@
             }
         });
 
-        // =====================================================
-        // FUNCIONES ADICIONALES DE MEJORA
-        // =====================================================
 
-        // Análisis de confianza por regiones
-        function analyzeConfidenceByRegions(ocrResult) {
-            if (!ocrResult.data.words) return [];
-            
-            const lowConfidenceWords = ocrResult.data.words.filter(word => 
-                word.confidence < 70
-            );
-            
-            debugLog(`Palabras con baja confianza: ${lowConfidenceWords.length}`);
-            return lowConfidenceWords;
-        }
-
-        // Sugerencias de mejora automáticas
-        function provideFeedback(imageAnalysis, confidence) {
-            const feedback = [];
-            
-            if (imageAnalysis.imageQuality.brightness < 80) {
-                feedback.push('💡 Mejora: Aumenta la iluminación');
-            }
-            
-            if (imageAnalysis.imageQuality.brightness > 180) {
-                feedback.push('💡 Mejora: Reduce la exposición');
-            }
-            
-            if (confidence < 70) {
-                feedback.push('💡 Mejora: Mantén el documento más plano');
-                feedback.push('💡 Mejora: Asegúrate de que no haya sombras');
-            }
-            
-            if (imageAnalysis.textDensity < 0.2) {
-                feedback.push('💡 Mejora: Enfoca mejor la región con texto');
-            }
-            
-            return feedback;
-        }
-
-        // Procesamiento por lotes mejorado
-        async function processMultipleRegions(canvas, textRegions) {
-            const results = [];
-            
-            for (const region of textRegions) {
-                try {
-                    const regionCanvas = extractRegion(canvas, region);
-                    const regionResult = await worker.recognize(regionCanvas);
-                    results.push({
-                        region,
-                        text: regionResult.data.text,
-                        confidence: regionResult.data.confidence
-                    });
-                } catch (error) {
-                    debugLog(`Error procesando región: ${error.message}`);
-                }
-            }
-            
-            return results;
-        }
-
-        function extractRegion(canvas, region) {
-            const regionCanvas = document.createElement('canvas');
-            regionCanvas.width = region.width;
-            regionCanvas.height = region.height;
-            const regionCtx = regionCanvas.getContext('2d');
-            
-            regionCtx.drawImage(canvas, 
-                region.x, region.y, region.width, region.height,
-                0, 0, region.width, region.height
-            );
-            
-            return regionCanvas;
-        }
-
-        // Auto-guardado de configuraciones exitosas
-        function saveSuccessfulConfig(documentType, config, confidence) {
-            if (confidence > 85) {
-                const savedConfigs = JSON.parse(localStorage.getItem('ocrConfigs') || '{}');
-                savedConfigs[documentType] = {
-                    config,
-                    confidence,
-                    timestamp: Date.now()
-                };
-                localStorage.setItem('ocrConfigs', JSON.stringify(savedConfigs));
-                debugLog(`Configuración guardada para ${documentType}: ${confidence}% confianza`);
-            }
-        }
-
-        function loadSavedConfig(documentType) {
-            const savedConfigs = JSON.parse(localStorage.getItem('ocrConfigs') || '{}');
-            return savedConfigs[documentType]?.config || null;
-        }
-
-        // Métricas avanzadas de rendimiento
-        function trackPerformanceMetrics(startTime, endTime, confidence, textLength) {
-            const metrics = {
-                processingTime: endTime - startTime,
-                confidence,
-                textLength,
-                charactersPerSecond: textLength / ((endTime - startTime) / 1000),
-                timestamp: Date.now()
-            };
-            
-            // Guardar métricas localmente para análisis
-            const allMetrics = JSON.parse(localStorage.getItem('ocrMetrics') || '[]');
-            allMetrics.push(metrics);
-            
-            // Mantener solo las últimas 100 métricas
-            if (allMetrics.length > 100) {
-                allMetrics.splice(0, allMetrics.length - 100);
-            }
-            
-            localStorage.setItem('ocrMetrics', JSON.stringify(allMetrics));
-            debugLog(`Métricas guardadas: ${JSON.stringify(metrics)}`);
-        }
-
-        // Función de prueba para desarrolladores
-        function runDiagnostics() {
-            debugLog('=== EJECUTANDO DIAGNÓSTICOS DEL SISTEMA ===');
-            
-            // Verificar Tesseract
-            debugLog(`Tesseract disponible: ${typeof Tesseract !== 'undefined'}`);
-            
-            // Verificar cámara
-            debugLog(`MediaDevices soportado: ${!!navigator.mediaDevices}`);
-            
-            // Verificar canvas
-            const testCanvas = document.createElement('canvas');
-            const ctx = testCanvas.getContext('2d');
-            debugLog(`Canvas soportado: ${!!ctx}`);
-            
-            // Verificar almacenamiento local
-            try {
-                localStorage.setItem('test', 'test');
-                localStorage.removeItem('test');
-                debugLog('LocalStorage: Disponible');
-            } catch (e) {
-                debugLog('LocalStorage: No disponible');
-            }
-            
-            // Mostrar métricas históricas
-            const metrics = JSON.parse(localStorage.getItem('ocrMetrics') || '[]');
-            if (metrics.length > 0) {
-                const avgConfidence = metrics.reduce((sum, m) => sum + m.confidence, 0) / metrics.length;
-                const avgTime = metrics.reduce((sum, m) => sum + m.processingTime, 0) / metrics.length;
-                debugLog(`Métricas históricas - Confianza promedio: ${avgConfidence.toFixed(1)}%, Tiempo promedio: ${avgTime.toFixed(1)}ms`);
-            }
-            
-            debugLog('=== DIAGNÓSTICOS COMPLETADOS ===');
-        }
-
-        // Exposer función de diagnósticos para desarrollo
-        window.runOCRDiagnostics = runDiagnostics;
 
         // Mensaje de bienvenida mejorado
-        setTimeout(() => {
-            if (typeof Tesseract !== 'undefined') {
-                showStatus('info', '🚀 Sistema OCR v2.0 listo con análisis inteligente. Inicia la cámara para comenzar.');
-                debugLog('Sistema OCR v2.0 completamente inicializado');
-                
-                // Mostrar tip aleatorio
-                const tips = [
-                    '💡 Tip: El sistema ahora detecta automáticamente el tipo de documento',
-                    '💡 Tip: Usa Ctrl+D para activar el modo debug avanzado', 
-                    '💡 Tip: El post-procesamiento contextual mejora automáticamente el texto'
-                ];
-                
-                setTimeout(() => {
-                    const randomTip = tips[Math.floor(Math.random() * tips.length)];
-                    showStatus('info', randomTip);
-                }, 3000);
+        setTimeout(async () => {
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/health`);
+                const data = await response.json();
+                if (data.success) {
+                    showStatus('info', '🚀 Sistema OCR v3.0 listo con OCR.Space API. Inicia la cámara para comenzar.');
+                    debugLog('Sistema OCR v3.0 completamente inicializado');
+                    
+                    // Mostrar tip aleatorio
+                    const tips = [
+                        '💡 Tip: El sistema usa OCR.Space API para máxima precisión',
+                        '💡 Tip: Usa Ctrl+D para activar el modo debug avanzado', 
+                        '💡 Tip: El preprocesamiento mejora automáticamente la imagen'
+                    ];
+                    
+                    setTimeout(() => {
+                        const randomTip = tips[Math.floor(Math.random() * tips.length)];
+                        showStatus('info', randomTip);
+                    }, 3000);
+                }
+            } catch (error) {
+                debugLog('Backend no disponible en mensaje de bienvenida');
             }
         }, 2000);
 
         // Auto-limpieza de datos antiguos
         function cleanupOldData() {
-            const configs = JSON.parse(localStorage.getItem('ocrConfigs') || '{}');
+            // Limpiar métricas antiguas
             const metrics = JSON.parse(localStorage.getItem('ocrMetrics') || '[]');
-            
-            // Limpiar configuraciones de más de 30 días
-            const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
-            
-            Object.keys(configs).forEach(key => {
-                if (configs[key].timestamp < thirtyDaysAgo) {
-                    delete configs[key];
-                }
-            });
-            
-            localStorage.setItem('ocrConfigs', JSON.stringify(configs));
             
             // Mantener solo las últimas 50 métricas
             if (metrics.length > 50) {
@@ -1796,13 +1009,13 @@
         // Ejecutar limpieza al cargar
         cleanupOldData();
 
-        debugLog('=== SISTEMA OCR v2.0 INICIALIZADO ===');
+        debugLog('=== SISTEMA OCR v3.0 INICIALIZADO ===');
         debugLog('Características habilitadas:');
-        debugLog('- Detección automática de tipo de documento');
-        debugLog('- Configuración OCR dinámica');
-        debugLog('- Post-procesamiento contextual');
+        debugLog('- OCR.Space API para máxima precisión');
+        debugLog('- Procesamiento en servidor optimizado');
         debugLog('- Preprocesamiento avanzado de imagen');
-        debugLog('- Corrección ortográfica inteligente');
+        debugLog('- Múltiples motores OCR (engine 1, 2, 3)');
+        debugLog('- Post-procesamiento inteligente');
         debugLog('- Análisis de calidad de imagen');
         debugLog('- Métricas de rendimiento');
         debugLog('=====================================');

@@ -42,12 +42,13 @@ def test_frontend_logs():
     
     time.sleep(1)
     
-    # Simular carga de Tesseract
-    send_test_log('DEBUG', 'Cargando Tesseract.js desde CDN principal')
+    # Simular verificación de backend
+    send_test_log('DEBUG', 'Verificando conexión con backend OCR.Space')
     time.sleep(0.5)
-    send_test_log('INFO', 'Tesseract.js cargado correctamente', {
-        'version': '4.1.1',
-        'languages': ['eng', 'spa', 'fra', 'deu']
+    send_test_log('INFO', 'Backend OCR.Space conectado correctamente', {
+        'apiKey': 'K86759595888957',
+        'endpoint': 'https://api.ocr.space/parse/image',
+        'engine': 2
     })
     
     time.sleep(1)
@@ -78,25 +79,21 @@ def test_frontend_logs():
     time.sleep(1)
     
     # Simular procesamiento OCR
-    send_test_log('INFO', '=== INICIO PROCESAMIENTO OCR ===', {
-        'tesseractAvailable': True,
+    send_test_log('INFO', '=== INICIO PROCESAMIENTO OCR.Space ===', {
+        'backendAvailable': True,
         'canvasValid': True,
         'canvasSize': '1280x720',
-        'workerActive': False,
+        'apiKeyConfigured': True,
         'debugMode': True
     })
     
     time.sleep(0.5)
     
-    send_test_log('DEBUG', 'Creando worker de Tesseract...')
+    send_test_log('DEBUG', 'Enviando imagen al servidor OCR.Space...')
     time.sleep(0.3)
-    send_test_log('DEBUG', 'Worker creado sin idioma, cargando idioma español...')
+    send_test_log('DEBUG', 'Imagen procesada, recibiendo respuesta...')
     time.sleep(0.3)
-    send_test_log('INFO', 'Worker creado exitosamente con español')
-    
-    time.sleep(0.5)
-    
-    send_test_log('INFO', 'OCR completado exitosamente', {
+    send_test_log('INFO', 'OCR.Space completado exitosamente', {
         'textLength': 156,
         'confidence': 87.5,
         'textPreview': 'Este es un documento de prueba que contiene texto para ser procesado por el sistema OCR...'
