@@ -71,10 +71,8 @@ def start_server():
     
     # Verificar API key
     if not check_api_key():
-        print("\n💡 Puedes continuar con la API key por defecto, pero es recomendable configurar la tuya.")
-        response = input("¿Continuar de todas formas? (s/n): ").lower()
-        if response not in ['s', 'si', 'sí', 'y', 'yes']:
-            return False
+        print("\n💡 Continuando con la API key por defecto...")
+        print("Para mejor rendimiento, configura tu API key con: python setup_ocr_space.py")
     
     print("\n🌐 Servidor iniciándose...")
     print("📱 Frontend disponible en: http://localhost:5000")

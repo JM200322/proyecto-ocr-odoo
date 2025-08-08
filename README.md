@@ -79,13 +79,18 @@ pip install -r requirements.txt
 
 ### Ejecutar
 
-**Opción 1 - Script de inicio rápido (recomendado):**
+**Opción 1 - Script de conveniencia (más fácil):**
+```bash
+python start.py
+```
+
+**Opción 2 - Script de inicio rápido:**
 ```bash
 cd backend
 python start_server.py
 ```
 
-**Opción 2 - Inicio manual:**
+**Opción 3 - Inicio manual:**
 ```bash
 cd backend
 python app.py
