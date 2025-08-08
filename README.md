@@ -81,6 +81,7 @@ pip install -r requirements.txt
 
 **Opción 1 - Script de inicio rápido (recomendado):**
 ```bash
+cd backend
 python start_server.py
 ```
 
