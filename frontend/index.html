@@ -5,22 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Herramienta OCR para Odoo - OCR.Space API v3.0</title>
     
+    <script src="config.js"></script>
     <script>
-        // Configuración del backend - Detección automática de URL
-        function getBackendURL() {
-            // Si estamos en el mismo dominio que el backend (despliegue en Render)
-            if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-                // Usar la misma URL del servidor actual
-                const detectedURL = `${window.location.protocol}//${window.location.host}`;
-                console.log('🌐 Detección automática de URL:', detectedURL);
-                return detectedURL;
-            }
-            // Para desarrollo local
-            console.log('🏠 Modo desarrollo local detectado');
-            return 'http://localhost:5000';
-        }
-        
-        const BACKEND_URL = getBackendURL();
+        // La configuración del backend viene de config.js
         console.log('🔗 Backend URL configurada:', BACKEND_URL);
         
         // Función para verificar conexión con el backend
@@ -57,12 +44,12 @@
         }
         
         // Verificar backend al cargar
-        checkBackendConnection().then(connected => {
-            if (!connected) {
-                document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', () => {
+            checkBackendConnection().then(connected => {
+                if (!connected) {
                     showStatus('error', '❌ Error: No se pudo conectar con el servidor OCR. Verifica que el backend esté ejecutándose.');
-                });
-            }
+                }
+            });
         });
     </script>
     
@@ -537,32 +524,10 @@
             ctx = canvas.getContext('2d');
             
             initKeyboardShortcuts();
-            checkBackendAvailability();
+            // checkBackendAvailability() eliminado - Ya no es necesario
         });
 
-        function checkBackendAvailability() {
-            const checkInterval = setInterval(async () => {
-                try {
-                    const response = await fetch(`${BACKEND_URL}/api/health`);
-                    const data = await response.json();
-                    
-                    if (data.success) {
-                    clearInterval(checkInterval);
-                        showStatus('success', '✅ Backend OCR.Space conectado. Sistema OCR v3.0 listo.');
-                        debugLog('Backend OCR.Space disponible - versión avanzada');
-                } else {
-                        showStatus('info', '⏳ Conectando con servidor OCR.Space...');
-                }
-                } catch (error) {
-                    showStatus('info', '⏳ Conectando con servidor OCR.Space...');
-                }
-            }, 1000);
-
-            setTimeout(() => {
-                    clearInterval(checkInterval);
-                showStatus('error', '❌ Error: No se pudo conectar con el servidor OCR. Verifica que el backend esté ejecutándose.');
-            }, 10000);
-        }
+        // Función eliminada - Ya no es necesaria porque checkBackendConnection() funciona correctamente
 
         // Gestión de Cámara (sin cambios)
         async function toggleCamera() {
