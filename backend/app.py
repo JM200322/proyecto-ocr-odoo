@@ -24,14 +24,31 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app)
 
-# Configuración OCR.Space
-OCR_SPACE_API_KEY = "K86759595888957"  # Tu API key
+# Configuración OCR.Space - USAR VARIABLE DE ENTORNO EN PRODUCCIÓN
+OCR_SPACE_API_KEY = os.environ.get('OCR_SPACE_API_KEY', 'K86759595888957')
 OCR_SPACE_ENDPOINT = "https://api.ocr.space/parse/image"
 
-logger.info("✅ Servidor OCR inicializado con configuración optimizada")
+# Detectar si estamos en Render
+IS_RENDER = os.environ.get('RENDER') == 'true' or os.environ.get('RENDER_SERVICE_NAME') is not None
+
+# Configuración específica para Render
+if IS_RENDER:
+    # Timeouts más largos para Render
+    DEFAULT_TIMEOUT = 120  # 2 minutos
+    MAX_RETRIES = 5
+    logger.info("🚀 Ejecutando en Render - Configuración de producción activada")
+else:
+    # Configuración local
+    DEFAULT_TIMEOUT = 60
+    MAX_RETRIES = 3
+    logger.info("💻 Ejecutando localmente - Configuración de desarrollo")
+
+logger.info(f"✅ Servidor OCR inicializado")
+logger.info(f"API Key configurada: {'Sí' if OCR_SPACE_API_KEY else 'No'}")
+logger.info(f"Entorno: {'Render' if IS_RENDER else 'Local'}")
 
 def load_and_prepare_image(image: Image.Image, max_px: int = 2200, target_size_kb: int = 900) -> bytes:
-    """Prepara imagen optimizada para OCR.Space según el nuevo método"""
+    """Prepara imagen optimizada para OCR.Space"""
     try:
         # Asegurar que la imagen esté cargada completamente
         image.load()
@@ -134,34 +151,134 @@ def preprocess_image_advanced(image: Image.Image, brightness: int = 0, contrast:
         logger.error(f"Error en preprocesamiento avanzado: {e}")
         return image
 
-def ocr_space_image(image_bytes: bytes, language: str = "spa", engine: int = 2, retries: int = 3, timeout: int = 60) -> Dict[str, Any]:
+def test_ocr_connection() -> Dict[str, Any]:
+    """Prueba rápida de conexión con OCR.Space"""
+    try:
+        logger.info("Probando conexión con OCR.Space...")
+        
+        # Crear una imagen de prueba mínima
+        test_img = Image.new('RGB', (100, 50), color='white')
+        from PIL import ImageDraw, ImageFont
+        draw = ImageDraw.Draw(test_img)
+        
+        # Escribir texto de prueba
+        try:
+            # Intentar usar una fuente por defecto
+            draw.text((10, 15), "TEST", fill='black')
+        except:
+            pass
+        
+        # Preparar imagen
+        buf = io.BytesIO()
+        test_img.save(buf, format="JPEG", quality=90)
+        buf.seek(0)
+        image_bytes = buf.getvalue()
+        
+        # Hacer petición de prueba con timeout corto
+        data = {
+            "apikey": OCR_SPACE_API_KEY,
+            "language": "eng",
+            "isOverlayRequired": False,
+            "OCREngine": 1,  # Engine 1 es más rápido para pruebas
+        }
+        
+        response = requests.post(
+            OCR_SPACE_ENDPOINT,
+            data=data,
+            files={"filename": ("test.jpg", image_bytes, "application/octet-stream")},
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            if not result.get("IsErroredOnProcessing", True):
+                logger.info("✅ Conexión con OCR.Space exitosa")
+                return {"success": True, "message": "Conexión exitosa"}
+            else:
+                error_msg = result.get("ErrorMessage", "Error desconocido")
+                logger.error(f"❌ Error de OCR.Space: {error_msg}")
+                return {"success": False, "message": f"Error API: {error_msg}"}
+        else:
+            logger.error(f"❌ HTTP {response.status_code}: {response.text[:200]}")
+            return {"success": False, "message": f"HTTP {response.status_code}"}
+            
+    except requests.Timeout:
+        logger.error("❌ Timeout al conectar con OCR.Space")
+        return {"success": False, "message": "Timeout - La API no responde"}
+    except requests.ConnectionError as e:
+        logger.error(f"❌ Error de conexión: {e}")
+        return {"success": False, "message": "No se puede conectar con OCR.Space"}
+    except Exception as e:
+        logger.error(f"❌ Error inesperado: {e}")
+        return {"success": False, "message": str(e)}
+
+def ocr_space_image(image_bytes: bytes, language: str = "spa", engine: int = 2, retries: int = None, timeout: int = None) -> Dict[str, Any]:
     """Llama OCR.Space con reintentos exponenciales y manejo robusto de errores"""
+    
+    # Usar configuración según entorno
+    if retries is None:
+        retries = MAX_RETRIES
+    if timeout is None:
+        timeout = DEFAULT_TIMEOUT
+    
+    # En Render, primero hacer una prueba de conexión
+    if IS_RENDER and retries == MAX_RETRIES:  # Solo en el primer intento
+        conn_test = test_ocr_connection()
+        if not conn_test["success"]:
+            logger.error(f"Fallo prueba de conexión: {conn_test['message']}")
+            # Continuar de todos modos, por si acaso
+    
     data = {
         "apikey": OCR_SPACE_API_KEY,
         "language": language,
         "isOverlayRequired": False,
         "OCREngine": engine,
         "detectOrientation": True,
-        "scale": True,  # Mejora reconocimiento
+        "scale": True,
     }
     
-    backoff = 2
+    # Headers adicionales para Render
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    }
+    
+    backoff = 2 if not IS_RENDER else 3  # Mayor backoff en Render
     last_error = None
     
     for attempt in range(1, retries + 1):
         try:
-            logger.info(f"Intento {attempt}/{retries} de OCR.Space con engine={engine}")
+            logger.info(f"Intento {attempt}/{retries} de OCR.Space con engine={engine}, timeout={timeout}s")
             
+            # Hacer la petición
             response = requests.post(
                 OCR_SPACE_ENDPOINT,
                 data=data,
                 files={"filename": ("image.jpg", image_bytes, "application/octet-stream")},
+                headers=headers,
                 timeout=timeout,
             )
-            response.raise_for_status()
+            
+            logger.info(f"Respuesta HTTP: {response.status_code}")
+            
+            # Verificar respuesta HTTP
+            if response.status_code != 200:
+                logger.error(f"Error HTTP {response.status_code}: {response.text[:500]}")
+                if response.status_code == 403:
+                    return {
+                        'text': '',
+                        'confidence': 0,
+                        'success': False,
+                        'message': 'API Key inválida o límite excedido'
+                    }
+                raise requests.HTTPError(f"HTTP {response.status_code}")
+            
             payload = response.json()
             
-            # Manejo de errores explícitos de la API
+            # Log detallado en Render
+            if IS_RENDER:
+                logger.info(f"Respuesta JSON keys: {list(payload.keys())}")
+            
+            # Manejo de errores de la API
             if payload.get("IsErroredOnProcessing"):
                 error_msg = payload.get("ErrorMessage") or payload.get("ErrorDetails") or "Unknown error"
                 logger.error(f"OCR.Space error: {error_msg}")
@@ -169,7 +286,19 @@ def ocr_space_image(image_bytes: bytes, language: str = "spa", engine: int = 2, 
                 # Si es error de engine, intentar con otro
                 if "OCREngine" in error_msg and engine == 2:
                     logger.info("Reintentando con OCREngine=3")
-                    return ocr_space_image(image_bytes, language, engine=3, retries=1, timeout=timeout)
+                    return ocr_space_image(image_bytes, language, engine=3, retries=2, timeout=timeout)
+                elif "OCREngine" in error_msg and engine == 3:
+                    logger.info("Reintentando con OCREngine=1")
+                    return ocr_space_image(image_bytes, language, engine=1, retries=2, timeout=timeout)
+                
+                # Si es error de límite de API
+                if "limit" in error_msg.lower() or "quota" in error_msg.lower():
+                    return {
+                        'text': '',
+                        'confidence': 0,
+                        'success': False,
+                        'message': 'Límite de API excedido. Intenta más tarde.'
+                    }
                 
                 raise RuntimeError(f"OCR.Space API error: {error_msg}")
             
@@ -184,14 +313,13 @@ def ocr_space_image(image_bytes: bytes, language: str = "spa", engine: int = 2, 
                     'message': 'No se detectó texto en la imagen'
                 }
             
-            # Extraer texto y métricas
+            # Extraer texto
             parsed_result = results[0]
             text = parsed_result.get("ParsedText", "")
             
-            # Calcular confianza aproximada basada en la presencia de texto
+            # Calcular confianza
             confidence = 100.0 if text.strip() else 0.0
             if text:
-                # Reducir confianza si hay muchos caracteres especiales o errores comunes
                 special_chars = sum(1 for c in text if not c.isalnum() and not c.isspace())
                 confidence = max(50, 100 - (special_chars * 2))
             
@@ -205,21 +333,35 @@ def ocr_space_image(image_bytes: bytes, language: str = "spa", engine: int = 2, 
                 'processing_time': response.elapsed.total_seconds()
             }
             
-        except (requests.HTTPError, requests.ConnectionError, requests.Timeout) as e:
-            last_error = e
+        except requests.Timeout:
+            last_error = "Timeout"
+            logger.warning(f"Timeout en intento {attempt}")
+            
+            if attempt < retries:
+                sleep_time = backoff
+                logger.info(f"Esperando {sleep_time}s antes de reintentar...")
+                time.sleep(sleep_time)
+                backoff *= 2
+                # Aumentar timeout para siguiente intento
+                timeout = min(timeout * 1.5, 180)  # Max 3 minutos
+            
+        except (requests.ConnectionError, requests.HTTPError) as e:
+            last_error = str(e)
             logger.warning(f"Error de conexión en intento {attempt}: {e}")
             
             if attempt < retries:
                 sleep_time = backoff
                 logger.info(f"Esperando {sleep_time}s antes de reintentar...")
                 time.sleep(sleep_time)
-                backoff *= 2  # Retry exponencial
-            else:
-                logger.error(f"Agotados todos los reintentos. Último error: {e}")
+                backoff *= 2
                 
         except Exception as e:
-            last_error = e
+            last_error = str(e)
             logger.error(f"Error inesperado: {e}")
+            # En errores inesperados, intentar con otro engine
+            if attempt == 1 and engine == 2:
+                logger.info("Error inesperado, probando con engine 1")
+                return ocr_space_image(image_bytes, language, engine=1, retries=2, timeout=timeout)
             break
     
     # Si llegamos aquí, todos los intentos fallaron
@@ -299,9 +441,10 @@ def process_ocr():
         brightness = data.get('brightness', 0)
         contrast = data.get('contrast', 100)
         sharpness = data.get('sharpness', 0)
-        engine = data.get('engine', 2)  # Permitir selección de engine
+        engine = data.get('engine', 2)
         
         logger.info(f"🔄 Procesando OCR con parámetros: B:{brightness}, C:{contrast}, S:{sharpness}, Engine:{engine}")
+        logger.info(f"Entorno: {'Render' if IS_RENDER else 'Local'}")
         
         # Decodificar imagen base64
         try:
@@ -348,7 +491,8 @@ def process_ocr():
                 'details': {
                     'preprocessing_time': preprocessing_time,
                     'prepare_time': prepare_time,
-                    'ocr_time': ocr_time
+                    'ocr_time': ocr_time,
+                    'environment': 'render' if IS_RENDER else 'local'
                 }
             }), 500
         
@@ -373,7 +517,8 @@ def process_ocr():
                 'postprocessing_time': postprocess_time,
                 'engine_used': ocr_result.get('engine_used', engine),
                 'characters_extracted': len(final_text),
-                'ocr_space_available': True
+                'ocr_space_available': True,
+                'environment': 'render' if IS_RENDER else 'local'
             }
         }
         
@@ -385,13 +530,16 @@ def process_ocr():
         logger.error(f"❌ Error general en process_ocr: {e}")
         return jsonify({
             'success': False,
-            'message': f'Error interno del servidor: {str(e)}'
+            'message': f'Error interno del servidor: {str(e)}',
+            'environment': 'render' if IS_RENDER else 'local'
         }), 500
 
-@app.route('/api/test-connection', methods=['POST'])
+@app.route('/api/test-connection', methods=['POST', 'GET'])
 def test_connection():
     """Probar conexión y capacidades del sistema"""
     try:
+        logger.info("🔍 Iniciando test de conexión...")
+        
         # Verificar capacidades del sistema
         capabilities = {
             'ocr_space_available': True,
@@ -400,34 +548,23 @@ def test_connection():
             'server_time': datetime.now().isoformat(),
             'python_version': os.sys.version,
             'ocr_api_key': OCR_SPACE_API_KEY[:8] + '...' if OCR_SPACE_API_KEY else 'No configurado',
-            'ocr_endpoint': OCR_SPACE_ENDPOINT
+            'ocr_endpoint': OCR_SPACE_ENDPOINT,
+            'environment': 'render' if IS_RENDER else 'local',
+            'render_service': os.environ.get('RENDER_SERVICE_NAME', 'N/A'),
+            'timeout_config': DEFAULT_TIMEOUT,
+            'max_retries': MAX_RETRIES
         }
         
         # Probar conexión con OCR.Space
-        try:
-            # Crear imagen de prueba mínima
-            test_img = Image.new('RGB', (100, 50), color='white')
-            from PIL import ImageDraw
-            draw = ImageDraw.Draw(test_img)
-            draw.text((10, 15), "TEST", fill='black')
-            
-            # Preparar y probar
-            test_bytes = load_and_prepare_image(test_img, max_px=100, target_size_kb=10)
-            test_result = ocr_space_image(test_bytes, language="eng", engine=2, retries=1, timeout=10)
-            
-            capabilities['ocr_space_test'] = test_result['success']
-            capabilities['ocr_space_message'] = 'Conexión exitosa' if test_result['success'] else test_result.get('message', 'Error')
-            
-        except Exception as ocr_error:
-            logger.warning(f"Error probando OCR.Space: {ocr_error}")
-            capabilities['ocr_space_test'] = False
-            capabilities['ocr_space_error'] = str(ocr_error)
+        ocr_test = test_ocr_connection()
+        capabilities['ocr_space_test'] = ocr_test['success']
+        capabilities['ocr_space_message'] = ocr_test['message']
         
-        logger.info("✅ Test de conexión completado")
+        logger.info(f"✅ Test de conexión completado: {ocr_test['message']}")
         
         return jsonify({
             'success': True,
-            'message': 'Conexión exitosa - Sistema OCR listo con configuración optimizada',
+            'message': 'Sistema OCR listo' if ocr_test['success'] else f"Advertencia: {ocr_test['message']}",
             'capabilities': capabilities
         })
         
@@ -435,7 +572,8 @@ def test_connection():
         logger.error(f"❌ Error en test_connection: {e}")
         return jsonify({
             'success': False,
-            'message': f'Error del servidor: {str(e)}'
+            'message': f'Error del servidor: {str(e)}',
+            'environment': 'render' if IS_RENDER else 'local'
         }), 500
 
 @app.route('/api/frontend-log', methods=['POST'])
@@ -477,12 +615,20 @@ def frontend_log():
 def health_check():
     """Verificar estado del servidor"""
     try:
+        # Hacer prueba rápida de OCR si estamos en Render
+        ocr_status = "not_tested"
+        if IS_RENDER:
+            test_result = test_ocr_connection()
+            ocr_status = "healthy" if test_result["success"] else "unhealthy"
+        
         return jsonify({
             'success': True,
             'status': 'healthy',
             'timestamp': datetime.now().isoformat(),
             'ocr_space_available': True,
             'ocr_api_key_configured': bool(OCR_SPACE_API_KEY),
+            'ocr_status': ocr_status,
+            'environment': 'render' if IS_RENDER else 'local',
             'endpoint': OCR_SPACE_ENDPOINT
         })
     except Exception as e:
@@ -490,16 +636,32 @@ def health_check():
         return jsonify({
             'success': False,
             'status': 'unhealthy',
-            'error': str(e)
+            'error': str(e),
+            'environment': 'render' if IS_RENDER else 'local'
         }), 500
 
 if __name__ == '__main__':
-    logger.info("🚀 Iniciando servidor OCR optimizado con OCR.Space...")
-    logger.info(f"API Key configurada: {bool(OCR_SPACE_API_KEY)}")
-    logger.info(f"Endpoint: {OCR_SPACE_ENDPOINT}")
-    logger.info("Características optimizadas:")
-    logger.info("  - Preparación automática de imágenes (max 2200px, <900KB)")
-    logger.info("  - Reintentos exponenciales automáticos")
-    logger.info("  - Fallback automático entre engines 2 y 3")
-    logger.info("  - Preprocesamiento con escala de grises + autocontraste + sharpen")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    logger.info("🚀 Iniciando servidor OCR optimizado...")
+    logger.info(f"Configuración:")
+    logger.info(f"  - Entorno: {'Render' if IS_RENDER else 'Local'}")
+    logger.info(f"  - API Key: {'Configurada' if OCR_SPACE_API_KEY else 'NO CONFIGURADA'}")
+    logger.info(f"  - Endpoint: {OCR_SPACE_ENDPOINT}")
+    logger.info(f"  - Timeout: {DEFAULT_TIMEOUT}s")
+    logger.info(f"  - Max reintentos: {MAX_RETRIES}")
+    
+    # Hacer prueba inicial de conexión
+    logger.info("Realizando prueba inicial de conexión...")
+    test_result = test_ocr_connection()
+    if test_result["success"]:
+        logger.info("✅ Conexión inicial con OCR.Space exitosa")
+    else:
+        logger.warning(f"⚠️ Problema con conexión inicial: {test_result['message']}")
+    
+    # Puerto de Render o 5000 local
+    port = int(os.environ.get('PORT', 5000))
+    
+    app.run(
+        debug=not IS_RENDER,  # Debug solo en local
+        host='0.0.0.0',
+        port=port
+    )
