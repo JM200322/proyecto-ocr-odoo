@@ -6,12 +6,28 @@
     <title>Herramienta OCR para Odoo - OCR.Space API v3.0</title>
     
     <script>
-        // Configuración del backend
-        const BACKEND_URL = 'http://localhost:5000';
+        // Configuración del backend - Detección automática de URL
+        function getBackendURL() {
+            // Si estamos en el mismo dominio que el backend (despliegue en Render)
+            if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                // Usar la misma URL del servidor actual
+                const detectedURL = `${window.location.protocol}//${window.location.host}`;
+                console.log('🌐 Detección automática de URL:', detectedURL);
+                return detectedURL;
+            }
+            // Para desarrollo local
+            console.log('🏠 Modo desarrollo local detectado');
+            return 'http://localhost:5000';
+        }
+        
+        const BACKEND_URL = getBackendURL();
+        console.log('🔗 Backend URL configurada:', BACKEND_URL);
         
         // Función para verificar conexión con el backend
         async function checkBackendConnection() {
             try {
+                console.log('🔍 Probando conexión con:', `${BACKEND_URL}/api/health`);
+                
                 const response = await fetch(`${BACKEND_URL}/api/health`, {
                     method: 'GET',
                     headers: {
@@ -19,16 +35,23 @@
                     }
                 });
                 
+                console.log('📡 Respuesta del servidor:', response.status, response.statusText);
+                
                 const data = await response.json();
+                console.log('📊 Datos de respuesta:', data);
+                
                 if (data.success) {
                     console.log('✅ Backend OCR.Space conectado correctamente');
                     return true;
                 } else {
-                    console.error('❌ Backend no disponible');
+                    console.error('❌ Backend no disponible:', data);
                     return false;
                 }
             } catch (error) {
                 console.error('❌ Error conectando con backend:', error);
+                console.error('🔗 URL intentada:', `${BACKEND_URL}/api/health`);
+                console.error('🌐 Hostname actual:', window.location.hostname);
+                console.error('📱 User Agent:', navigator.userAgent);
                 return false;
             }
         }
@@ -524,19 +547,19 @@
                     const data = await response.json();
                     
                     if (data.success) {
-                        clearInterval(checkInterval);
+                    clearInterval(checkInterval);
                         showStatus('success', '✅ Backend OCR.Space conectado. Sistema OCR v3.0 listo.');
                         debugLog('Backend OCR.Space disponible - versión avanzada');
-                    } else {
+                } else {
                         showStatus('info', '⏳ Conectando con servidor OCR.Space...');
-                    }
+                }
                 } catch (error) {
                     showStatus('info', '⏳ Conectando con servidor OCR.Space...');
                 }
             }, 1000);
 
             setTimeout(() => {
-                clearInterval(checkInterval);
+                    clearInterval(checkInterval);
                 showStatus('error', '❌ Error: No se pudo conectar con el servidor OCR. Verifica que el backend esté ejecutándose.');
             }, 10000);
         }
@@ -976,18 +999,18 @@
                 if (data.success) {
                     showStatus('info', '🚀 Sistema OCR v3.0 listo con OCR.Space API. Inicia la cámara para comenzar.');
                     debugLog('Sistema OCR v3.0 completamente inicializado');
-                    
-                    // Mostrar tip aleatorio
-                    const tips = [
+                
+                // Mostrar tip aleatorio
+                const tips = [
                         '💡 Tip: El sistema usa OCR.Space API para máxima precisión',
-                        '💡 Tip: Usa Ctrl+D para activar el modo debug avanzado', 
+                    '💡 Tip: Usa Ctrl+D para activar el modo debug avanzado', 
                         '💡 Tip: El preprocesamiento mejora automáticamente la imagen'
-                    ];
-                    
-                    setTimeout(() => {
-                        const randomTip = tips[Math.floor(Math.random() * tips.length)];
-                        showStatus('info', randomTip);
-                    }, 3000);
+                ];
+                
+                setTimeout(() => {
+                    const randomTip = tips[Math.floor(Math.random() * tips.length)];
+                    showStatus('info', randomTip);
+                }, 3000);
                 }
             } catch (error) {
                 debugLog('Backend no disponible en mensaje de bienvenida');
