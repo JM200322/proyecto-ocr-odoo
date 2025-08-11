@@ -297,6 +297,31 @@
             margin: 10px 0;
             display: none;
         }
+        
+        .frame-controls {
+            background: #f7fafc;
+            border-radius: 12px;
+            padding: 15px;
+            margin: 15px 0;
+            border: 2px solid #e2e8f0;
+        }
+        
+        .frame-controls label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #2d3748;
+        }
+        
+        .frame-controls input[type="range"] {
+            width: 100%;
+            margin-bottom: 10px;
+        }
+        
+        .frame-controls span {
+            color: #667eea;
+            font-weight: bold;
+        }
 
         .progress-bar {
             width: 100%;
@@ -439,6 +464,24 @@
                 🔄 Cambiar Cámara
             </button>
         </div>
+        
+        <!-- Controles del Marco de Enfoque -->
+        <div class="frame-controls" id="frameControls" style="display: none;">
+            <h4 style="color: #2d3748; margin-bottom: 10px;">🎯 Marco de Enfoque</h4>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                <div>
+                    <label for="frameWidth">Ancho: <span id="frameWidthValue">80%</span></label>
+                    <input type="range" id="frameWidth" min="40" max="90" value="80" onchange="adjustFrame()">
+                </div>
+                <div>
+                    <label for="frameHeight">Alto: <span id="frameHeightValue">60%</span></label>
+                    <input type="range" id="frameHeight" min="30" max="80" value="60" onchange="adjustFrame()">
+                </div>
+            </div>
+            <button class="btn btn-secondary" onclick="resetFrame()" style="width: 100%;">
+                🔄 Restablecer Marco
+            </button>
+        </div>
 
         <button class="btn btn-success" id="captureBtn" onclick="captureAndProcess()" disabled>
             📸 Capturar y Procesar (Espacio)
@@ -482,6 +525,8 @@
             <p>• Procesamiento en servidor optimizado</p>
             <p>• Preprocesamiento avanzado de imágenes</p>
             <p>• Múltiples motores OCR (engine 1, 2, 3)</p>
+            <p>• 🎯 Marco de enfoque inteligente para mejor precisión</p>
+            <p>• 📐 Controles ajustables del área de captura</p>
         </div>
     </div>
 
@@ -529,6 +574,42 @@
 
         // Función eliminada - Ya no es necesaria porque checkBackendConnection() funciona correctamente
 
+        // Funciones para controlar el marco de enfoque
+        function adjustFrame() {
+            const widthSlider = document.getElementById('frameWidth');
+            const heightSlider = document.getElementById('frameHeight');
+            const widthValue = document.getElementById('frameWidthValue');
+            const heightValue = document.getElementById('frameHeightValue');
+            const scanFrame = document.querySelector('.scan-frame');
+            
+            const width = widthSlider.value;
+            const height = heightSlider.value;
+            
+            // Actualizar valores mostrados
+            widthValue.textContent = width + '%';
+            heightValue.textContent = height + '%';
+            
+            // Aplicar cambios al marco
+            scanFrame.style.width = width + '%';
+            scanFrame.style.height = height + '%';
+            
+            debugLog(`🎯 Marco ajustado: ${width}% x ${height}%`);
+        }
+        
+        function resetFrame() {
+            const widthSlider = document.getElementById('frameWidth');
+            const heightSlider = document.getElementById('frameHeight');
+            
+            // Restablecer a valores por defecto
+            widthSlider.value = 80;
+            heightSlider.value = 60;
+            
+            // Aplicar cambios
+            adjustFrame();
+            
+            showStatus('info', '🔄 Marco de enfoque restablecido');
+        }
+
         // Gestión de Cámara (sin cambios)
         async function toggleCamera() {
             const btn = document.getElementById('cameraBtn');
@@ -572,8 +653,12 @@
                 document.getElementById('flipBtn').disabled = false;
                 document.getElementById('captureBtn').disabled = false;
                 
+                // Mostrar controles del marco de enfoque
+                document.getElementById('frameControls').style.display = 'block';
+                
                 showStatus('info', '📷 Cámara activa. Sistema OCR v3.0 preparado para análisis con OCR.Space.');
                 debugLog(`Cámara iniciada: ${video.videoWidth}x${video.videoHeight}`);
+                debugLog('🎯 Controles del marco de enfoque habilitados');
                 
             } catch (error) {
                 let errorMessage = 'Error al acceder a la cámara';
@@ -598,6 +683,9 @@
                 
                 video.style.display = 'none';
                 document.getElementById('cameraOverlay').style.display = 'none';
+                
+                // Ocultar controles del marco de enfoque
+                document.getElementById('frameControls').style.display = 'none';
                 
                 document.getElementById('cameraBtn').textContent = '📷 Iniciar Cámara';
                 document.getElementById('flipBtn').disabled = true;
@@ -649,13 +737,42 @@
                 debugLog(`=== INICIANDO CAPTURA Y PROCESAMIENTO v2.0 ===`);
                 debugLog(`Capturando imagen: ${video.videoWidth}x${video.videoHeight}`);
 
-                // Capturar con máxima calidad
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
+                // Capturar solo el área del marco de enfoque
+                const scanFrame = document.querySelector('.scan-frame');
+                const frameRect = scanFrame.getBoundingClientRect();
+                const videoRect = video.getBoundingClientRect();
+                
+                // Calcular las coordenadas del marco relativo al video
+                const frameLeft = frameRect.left - videoRect.left;
+                const frameTop = frameRect.top - videoRect.top;
+                const frameWidth = frameRect.width;
+                const frameHeight = frameRect.height;
+                
+                // Ajustar para la resolución real del video
+                const scaleX = video.videoWidth / videoRect.width;
+                const scaleY = video.videoHeight / videoRect.height;
+                
+                const sourceX = frameLeft * scaleX;
+                const sourceY = frameTop * scaleY;
+                const sourceWidth = frameWidth * scaleX;
+                const sourceHeight = frameHeight * scaleY;
+                
+                // Configurar canvas para la resolución del marco
+                canvas.width = sourceWidth;
+                canvas.height = sourceHeight;
                 
                 ctx.imageSmoothingEnabled = true;
                 ctx.imageSmoothingQuality = 'high';
-                ctx.drawImage(video, 0, 0);
+                
+                // Capturar solo el área del marco
+                ctx.drawImage(
+                    video,
+                    sourceX, sourceY, sourceWidth, sourceHeight,  // Área fuente (marco)
+                    0, 0, sourceWidth, sourceHeight               // Área destino (canvas completo)
+                );
+                
+                debugLog(`📐 Marco de enfoque: ${Math.round(sourceWidth)}x${Math.round(sourceHeight)}px`);
+                debugLog(`📍 Posición: (${Math.round(sourceX)}, ${Math.round(sourceY)})`);
 
                 // Mostrar imagen capturada
                 video.style.display = 'none';
@@ -886,7 +1003,19 @@
                 btn.textContent = '🐛 Debug: ON';
                 btn.className = 'btn btn-success';
                 debugInfo.style.display = 'block';
-                showStatus('info', '🐛 Modo debug activado - Sistema OCR v2.0');
+                showStatus('info', '🐛 Modo debug activado - Sistema OCR v3.0');
+                
+                // Mostrar información del marco de enfoque
+                if (stream) {
+                    const scanFrame = document.querySelector('.scan-frame');
+                    const frameRect = scanFrame.getBoundingClientRect();
+                    const videoRect = video.getBoundingClientRect();
+                    
+                    debugLog(`🎯 Marco de enfoque actual:`);
+                    debugLog(`   📐 Tamaño: ${Math.round(frameRect.width)}x${Math.round(frameRect.height)}px`);
+                    debugLog(`   📍 Posición: (${Math.round(frameRect.left - videoRect.left)}, ${Math.round(frameRect.top - videoRect.top)})`);
+                    debugLog(`   📱 Porcentaje: ${Math.round((frameRect.width / videoRect.width) * 100)}% x ${Math.round((frameRect.height / videoRect.height) * 100)}%`);
+                }
             } else {
                 btn.textContent = '🐛 Modo Debug';
                 btn.className = 'btn btn-secondary';
