@@ -224,6 +224,14 @@ def test_connection():
     except Exception as e:
         return f"Error sirviendo página de prueba de conexión: {e}", 500
 
+@app.route('/simple-test')
+def simple_test():
+    """Página de prueba simplificada para diagnosticar problemas de conexión"""
+    try:
+        return send_from_directory('..', 'simple_test.html')
+    except Exception as e:
+        return f"Error sirviendo página de prueba simple: {e}", 500
+
 @app.route('/api/process-ocr', methods=['POST'])
 def process_ocr():
     """Procesar imagen con OCR de máxima precisión"""

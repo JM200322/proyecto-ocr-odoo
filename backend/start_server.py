@@ -45,7 +45,7 @@ def check_api_key():
         from ocr_space_client import OCRSpaceClient
         client = OCRSpaceClient()
         
-        if client.api_key and client.api_key != "K83360008788957":
+        if client.api_key and client.api_key != "K86759595888957":
             print("✅ API key configurada")
             return True
         else:
