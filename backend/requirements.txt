@@ -1,5 +1,11 @@
 flask==2.3.3
 flask-cors==4.0.0
+flask-jwt-extended==4.5.3
+flask-limiter==3.5.0
 requests==2.31.0
 Pillow>=11.0.0
 opencv-python>=4.8.0
+redis==5.0.0
+celery==5.3.4
+structlog==23.2.0
+python-magic==0.4.27

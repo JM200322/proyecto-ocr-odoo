@@ -224,22 +224,4 @@ class OCRSpaceClient:
             logger.error(f"Error procesando imagen desde bytes: {e}")
             return {"success": False, "message": str(e)}
 
-def main():
-    """Función de prueba"""
-    client = OCRSpaceClient()
-    image_path = "./digitos.png"  # ajusta tu ruta
-    
-    try:
-        result = client.process_image_from_path(image_path, language="spa", engine=2)
-        if result["success"] and result["text"].strip():
-            print("Texto detectado:\n", result["text"])
-            print(f"Confianza: {result['confidence']:.1f}%")
-            print(f"Tiempo de procesamiento: {result['processing_time']:.2f}s")
-        else:
-            print("No se detectó texto (prueba con más contraste/otra imagen o engine=3).")
-            print(f"Error: {result.get('message', 'Error desconocido')}")
-    except Exception as e:
-        print(f"[Error] {e}")
-
-if __name__ == "__main__":
-    main() 
+ 
