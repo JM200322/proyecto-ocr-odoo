@@ -10,7 +10,10 @@
       "Bash(npm run build:*)",
       "Bash(npm audit:*)",
       "Bash(npm run dev:*)",
-      "Bash(timeout:*)"
+      "Bash(timeout:*)",
+      "WebFetch(domain:proyecto-ocr-odoo.onrender.com)",
+      "Bash(cp:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

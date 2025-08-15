@@ -679,6 +679,18 @@ def get_system_stats():
             'message': 'Error obteniendo estadísticas'
         }), 500
 
+# ============ RUTAS PARA SERVIR FRONTEND ============
+
+@app.route('/')
+def index():
+    """Servir la aplicación Vue.js"""
+    return send_from_directory('static', 'index.html')
+
+@app.route('/<path:path>')
+def serve_static(path):
+    """Servir archivos estáticos del frontend Vue.js"""
+    return send_from_directory('static', path)
+
 if __name__ == '__main__':
     logger.info("Iniciando servidor OCR modular v3.0...")
     if OCR_PROCESSOR_AVAILABLE:
