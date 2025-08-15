@@ -1,6 +1,7 @@
 # backend/ocr_space_client.py
 import time
 import io
+import os
 import logging
 from pathlib import Path
 from typing import Optional, Dict, Any
@@ -11,8 +12,9 @@ import base64
 logger = logging.getLogger(__name__)
 
 class OCRSpaceClient:
-    def __init__(self, api_key: str = "K86759595888957"):
-        self.api_key = api_key
+    def __init__(self, api_key: str = None):
+        # Usar variable de entorno o valor por defecto
+        self.api_key = api_key or os.getenv('OCR_API_KEY', 'YOUR_API_KEY_HERE')
         self.endpoint = "https://api.ocr.space/parse/image"
         
     def load_and_prepare(self, image_path: Path, max_px: int = 2200, target_size_kb: int = 900) -> bytes:
