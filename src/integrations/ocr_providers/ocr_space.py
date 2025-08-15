@@ -200,6 +200,12 @@ class OCRSpaceProvider(OCRProvider):
                 if payload.get("IsErroredOnProcessing"):
                     error_msg = payload.get("ErrorMessage") or payload.get("ErrorDetails") or "Unknown API error"
                     
+                    # Asegurar que error_msg sea string
+                    if isinstance(error_msg, list):
+                        error_msg = str(error_msg)
+                    elif not isinstance(error_msg, str):
+                        error_msg = str(error_msg)
+                    
                     # Si es error 500, intentar con motor alternativo
                     if "internal server error" in error_msg.lower() and engine == 2:
                         logger.warning(f"Error 500 con motor {engine}, probando motor 3...")
