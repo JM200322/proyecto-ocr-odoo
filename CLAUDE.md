@@ -20,13 +20,31 @@ python start_server.py
 # Option 3 - Direct Flask app
 cd backend
 python app.py
+
+# Option 4 - Vue.js Frontend (NEW)
+python start_vue.py
+```
+
+### Frontend Options:
+```bash
+# Vue.js Frontend (Modern, recommended)
+python start_vue.py
+# Opens http://localhost:3000 with hot-reload
+
+# Original Vanilla JS Frontend
+# Open frontend/index.html directly or serve through backend
 ```
 
 ### Install dependencies:
 ```bash
+# Backend dependencies
 cd backend
 pip install -r requirements.txt
 # Note: requirements.txt now includes JWT, rate limiting, Redis, Celery, and structured logging
+
+# Vue.js Frontend dependencies (if using Vue frontend)
+cd frontend-vue
+npm install
 ```
 
 ### Test the modular system:
@@ -59,8 +77,17 @@ python quick_test.py       # Basic functionality
 - **`database.py`** - SQLite database manager with threading support and comprehensive ORM
 - **`odoo_client.py`** - Odoo XML-RPC integration (unchanged)
 
-### Frontend (Vanilla JavaScript)
-- **`frontend/index.html`** - Enhanced web interface with new OCR capabilities
+### Frontend Options
+#### Vue.js Frontend (Recommended - `frontend-vue/`)
+- **`src/App.vue`** - Main Vue application with reactive state management
+- **`src/components/CameraComponent.vue`** - Advanced camera controls and image capture
+- **`src/components/OCRResults.vue`** - Results display and text editing
+- **`src/components/StatisticsDisplay.vue`** - Real-time metrics and performance stats
+- **`src/config.js`** - Backend URL configuration
+- **Modern Features:** Hot-reload, component-based architecture, Vue 3 Composition API
+
+#### Original Vanilla JavaScript (`frontend/`)
+- **`frontend/index.html`** - Enhanced web interface with OCR capabilities
 - **`frontend/config.js`** - Backend URL configuration
 
 ## Key Technical Details
@@ -118,8 +145,20 @@ python quick_test.py       # Basic functionality
 2. **New OCR Providers**: Add to `src/integrations/ocr_providers/`
 3. **API Changes**: Update `backend/app.py`
 4. **Database Changes**: Modify `backend/database.py`
-5. **Frontend Changes**: Edit files in `frontend/` directory
+5. **Frontend Changes**: 
+   - **Vue.js (Recommended)**: Edit files in `frontend-vue/src/` directory
+   - **Original**: Edit files in `frontend/` directory
 6. **Testing**: Use `backend/test_new_system.py` for comprehensive testing
+
+### Vue.js Development
+```bash
+# Start development server with hot-reload
+cd frontend-vue
+npm run dev  # Opens http://localhost:3000
+
+# Build for production  
+npm run build  # Creates dist/ folder
+```
 
 ## Testing
 
