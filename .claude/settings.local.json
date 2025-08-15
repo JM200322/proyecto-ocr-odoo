@@ -13,7 +13,9 @@
       "Bash(timeout:*)",
       "WebFetch(domain:proyecto-ocr-odoo.onrender.com)",
       "Bash(cp:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
