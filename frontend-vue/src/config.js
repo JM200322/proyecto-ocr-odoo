@@ -1,9 +1,9 @@
 // Configuración del Backend
 // Para DESARROLLO LOCAL (localhost)
-// export const BACKEND_URL = 'http://localhost:5000';
+export const BACKEND_URL = 'http://127.0.0.1:5000';
 
 // Para PRODUCCIÓN (Render)
-export const BACKEND_URL = 'https://proyecto-ocr-odoo-1.onrender.com';
+// export const BACKEND_URL = 'https://proyecto-ocr-odoo-1.onrender.com';
 
 // Para DESARROLLO LOCAL con IP específica (si localhost no funciona)
 // export const BACKEND_URL = 'http://127.0.0.1:5000';
