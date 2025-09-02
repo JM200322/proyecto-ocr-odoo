@@ -43,35 +43,6 @@
       </button>
     </div>
 
-    <!-- Controles del Marco de Enfoque -->
-    <div class="frame-controls" v-show="stream">
-      <h4>🎯 Marco de Enfoque</h4>
-      <div class="frame-sliders">
-        <div>
-          <label>Ancho: <span>{{ frameWidth }}%</span></label>
-          <input 
-            type="range" 
-            v-model="frameWidth"
-            min="40" 
-            max="90" 
-            @input="adjustFrame"
-          >
-        </div>
-        <div>
-          <label>Alto: <span>{{ frameHeight }}%</span></label>
-          <input 
-            type="range" 
-            v-model="frameHeight"
-            min="30" 
-            max="80" 
-            @input="adjustFrame"
-          >
-        </div>
-      </div>
-      <button class="btn btn-secondary" @click="resetFrame">
-        🔄 Restablecer Marco
-      </button>
-    </div>
 
     <button 
       class="btn btn-success" 
@@ -100,8 +71,9 @@ const isProcessing = ref(false)
 const showVideo = ref(false)
 const showCanvas = ref(false)
 const previewImage = ref('')
-const frameWidth = ref(80)
-const frameHeight = ref(60)
+// Marco fijo centrado (80% ancho, 60% alto)
+const frameWidth = 80
+const frameHeight = 60
 
 // Computed
 const cameraButtonText = computed(() => {
@@ -109,8 +81,8 @@ const cameraButtonText = computed(() => {
 })
 
 const frameStyle = computed(() => ({
-  width: frameWidth.value + '%',
-  height: frameHeight.value + '%'
+  width: frameWidth + '%',
+  height: frameHeight + '%'
 }))
 
 // Métodos
@@ -189,15 +161,6 @@ const flipCamera = async () => {
   }
 }
 
-const adjustFrame = () => {
-  console.log(`🎯 Marco ajustado: ${frameWidth.value}% x ${frameHeight.value}%`)
-}
-
-const resetFrame = () => {
-  frameWidth.value = 80
-  frameHeight.value = 60
-  emit('status-change', '🔄 Marco de enfoque restablecido', 'info')
-}
 
 const captureAndProcess = async () => {
   if (!stream.value || isProcessing.value) return
@@ -225,12 +188,12 @@ const captureAndProcess = async () => {
     console.log(`=== INICIANDO CAPTURA Y PROCESAMIENTO v3.0 ===`)
     console.log(`Capturando imagen: ${video.value.videoWidth}x${video.value.videoHeight}`)
 
-    // Capturar solo el área del marco de enfoque
+    // Capturar solo el área del marco verde
     const videoRect = video.value.getBoundingClientRect()
     
     // Calcular las coordenadas del marco relativo al video
-    const frameWidthPx = (frameWidth.value / 100) * videoRect.width
-    const frameHeightPx = (frameHeight.value / 100) * videoRect.height
+    const frameWidthPx = (frameWidth / 100) * videoRect.width
+    const frameHeightPx = (frameHeight / 100) * videoRect.height
     const frameLeft = (videoRect.width - frameWidthPx) / 2
     const frameTop = (videoRect.height - frameHeightPx) / 2
     
@@ -440,42 +403,6 @@ canvas {
   margin-bottom: 20px;
 }
 
-.frame-controls {
-  background: #f7fafc;
-  border-radius: 12px;
-  padding: 15px;
-  margin: 15px 0;
-  border: 2px solid #e2e8f0;
-}
-
-.frame-controls h4 {
-  color: #2d3748;
-  margin-bottom: 10px;
-}
-
-.frame-sliders {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.frame-controls label {
-  display: block;
-  margin-bottom: 5px;
-  font-weight: 600;
-  color: #2d3748;
-}
-
-.frame-controls input[type="range"] {
-  width: 100%;
-  margin-bottom: 10px;
-}
-
-.frame-controls span {
-  color: #667eea;
-  font-weight: bold;
-}
 
 .image-preview {
   margin: 15px 0;
