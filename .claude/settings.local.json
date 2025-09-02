@@ -15,7 +15,12 @@
       "Bash(cp:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(robocopy:*)",
+      "Bash(copy:*)",
+      "Bash(for file in *)",
+      "Bash(do cp \"$file\" \"C:/Users/JMMARTINEZF/Desktop/proyecto-ocr-odoo/backend/static/assets/$file\")",
+      "Bash(done)"
     ],
     "deny": [],
     "ask": []
