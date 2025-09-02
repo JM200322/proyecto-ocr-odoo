@@ -36,6 +36,19 @@
       </button>
     </div>
 
+    <!-- Modo de OCR -->
+    <div class="ocr-mode-controls">
+      <label class="mode-toggle">
+        <input 
+          type="checkbox" 
+          v-model="digitsOnly"
+          class="mode-checkbox"
+        >
+        <span class="mode-label">📊 Solo dígitos (medidores)</span>
+        <div class="mode-description">Optimizado para leer números en medidores, displays y contadores</div>
+      </label>
+    </div>
+
 
     <button 
       class="btn btn-success" 
@@ -67,6 +80,7 @@ const previewImage = ref('')
 // Marco fijo centrado (80% ancho, 60% alto)
 const frameWidth = 80
 const frameHeight = 60
+const digitsOnly = ref(false)
 
 // Computed
 const cameraButtonText = computed(() => {
@@ -248,7 +262,8 @@ const processOCRWithAdvancedSystem = async () => {
         image_data: imageData,
         brightness: 0,
         contrast: 100,
-        sharpness: 0
+        sharpness: 0,
+        digits_only: digitsOnly.value
       })
     })
     
@@ -383,6 +398,40 @@ canvas {
 
 .camera-controls {
   margin-bottom: 20px;
+}
+
+.ocr-mode-controls {
+  margin-bottom: 20px;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 12px;
+  border: 2px solid #e9ecef;
+}
+
+.mode-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.mode-checkbox {
+  margin: 0;
+  transform: scale(1.2);
+}
+
+.mode-label {
+  font-weight: 600;
+  color: #2d3748;
+  font-size: 16px;
+}
+
+.mode-description {
+  font-size: 13px;
+  color: #718096;
+  margin-top: 4px;
+  margin-left: 20px;
 }
 
 

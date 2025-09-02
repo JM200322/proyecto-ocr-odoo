@@ -61,6 +61,7 @@ class OCRProcessor:
         document_type: str = 'general',
         preprocessing_params: Dict = None,
         use_cache: bool = True,
+        digits_only: bool = False,
         **kwargs
     ) -> Dict[str, Any]:
         """
@@ -127,6 +128,7 @@ class OCRProcessor:
             ocr_result = await self.orchestrator.process_with_fallback(
                 processed_image,
                 language=language,
+                digits_only=digits_only,
                 **kwargs
             )
             

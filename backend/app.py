@@ -313,6 +313,7 @@ def process_ocr():
         language = data.get('language', 'es')
         document_type = data.get('document_type', 'general')
         use_cache = data.get('use_cache', True)
+        digits_only = data.get('digits_only', False)
         
         # Parámetros de preprocesamiento
         preprocessing_params = {
@@ -366,7 +367,8 @@ def process_ocr():
                 document_type=document_type,
                 preprocessing_params=preprocessing_params,
                 use_cache=use_cache,
-                engine=data.get('engine', 2)
+                engine=data.get('engine', 2),
+                digits_only=digits_only
             ))
         else:
             # Fallback a procesamiento legacy simplificado

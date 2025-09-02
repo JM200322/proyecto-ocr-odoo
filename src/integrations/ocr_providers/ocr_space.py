@@ -108,6 +108,7 @@ class OCRSpaceProvider(OCRProvider):
         image: Image.Image, 
         language: str = 'spa', 
         engine: int = None,
+        digits_only: bool = False,
         **kwargs
     ) -> Dict[str, Any]:
         """Procesar imagen con OCR.Space"""
@@ -132,7 +133,10 @@ class OCRSpaceProvider(OCRProvider):
                 }
             
             # Preprocesar imagen para OCR.Space
-            processed_image = self._prepare_image_for_ocr_space(image)
+            if digits_only:
+                processed_image = self._prepare_image_for_digits(image)
+            else:
+                processed_image = self._prepare_image_for_ocr_space(image)
             
             # Convertir a bytes
             img_buffer = io.BytesIO()
@@ -152,7 +156,8 @@ class OCRSpaceProvider(OCRProvider):
                 mapped_language, 
                 engine, 
                 self.config['max_retries'], 
-                self.config['timeout']
+                self.config['timeout'],
+                digits_only
             )
             
             result['processing_time'] = time.time() - start_time
@@ -203,13 +208,123 @@ class OCRSpaceProvider(OCRProvider):
         
         return image
     
+    def _prepare_image_for_digits(self, image: Image.Image) -> Image.Image:
+        """Preprocesamiento específico para reconocimiento de dígitos en medidores/displays"""
+        
+        # Convertir a RGB si es necesario
+        if image.mode not in ("RGB", "L"):
+            image = image.convert("RGB")
+        
+        # Para medidores digitales, usar resolución más alta
+        w, h = image.size
+        target_height = 1200  # Resolución alta para dígitos pequeños
+        
+        if h < target_height:
+            scale = target_height / float(h)
+            new_size = (int(w * scale), int(h * scale))
+            image = image.resize(new_size, Image.Resampling.LANCZOS)
+            logger.debug(f"Imagen escalada para dígitos: {w}x{h} -> {new_size[0]}x{new_size[1]}")
+        
+        # Convertir a escala de grises para mejor contraste de dígitos
+        grayscale = ImageOps.grayscale(image)
+        
+        # Aumentar contraste agresivamente para dígitos
+        enhanced = ImageOps.autocontrast(grayscale, cutoff=2)
+        
+        # Aplicar filtro sharpen más fuerte para dígitos
+        sharpened = enhanced.filter(ImageFilter.SHARPEN)
+        sharpened = sharpened.filter(ImageFilter.SHARPEN)  # Doble sharpen
+        
+        # Aplicar umbralización para binarizar la imagen (blanco/negro puro)
+        # Esto ayuda mucho con displays digitales
+        import numpy as np
+        img_array = np.array(sharpened)
+        
+        # Umbralización adaptativa (mejor para displays con diferentes brillos)
+        threshold = np.mean(img_array)  # Umbral dinámico
+        binary_array = np.where(img_array > threshold, 255, 0).astype(np.uint8)
+        
+        # Convertir de vuelta a PIL
+        binary_image = Image.fromarray(binary_array, mode='L')
+        
+        # Convertir a RGB para OCR.Space
+        result_image = binary_image.convert("RGB")
+        
+        logger.debug("Preprocesamiento para dígitos completado: binarización aplicada")
+        return result_image
+    
+    def _extract_digits_only(self, text: str) -> str:
+        """Extraer solo dígitos y puntos decimales del texto OCR"""
+        import re
+        
+        if not text:
+            return ""
+        
+        # Remover saltos de línea y espacios extras
+        cleaned_text = text.replace('\n', ' ').replace('\r', ' ')
+        
+        # Extraer números (incluyendo decimales y negativos)
+        # Patrón: números enteros, decimales, con posibles espacios entre dígitos
+        number_patterns = [
+            r'-?\d+[.,]\d+',          # Decimales: 123.45 o 123,45
+            r'-?\d+',                 # Enteros: 123
+            r'\d+\s+\d+[.,]\d+',      # Con espacios: 1 234.56
+            r'\d+\s+\d+',             # Con espacios: 1 234
+        ]
+        
+        numbers = []
+        for pattern in number_patterns:
+            matches = re.findall(pattern, cleaned_text)
+            numbers.extend(matches)
+        
+        # Si no encontramos números con patrones, extraer dígitos sueltos
+        if not numbers:
+            # Extraer solo dígitos, puntos y comas
+            digits_only = re.findall(r'[\d.,\-\s]+', cleaned_text)
+            if digits_only:
+                # Limpiar espacios extra y unir
+                cleaned_digits = ''.join(digits_only).strip()
+                # Remover espacios internos pero mantener puntos/comas
+                cleaned_digits = re.sub(r'\s+', '', cleaned_digits)
+                numbers = [cleaned_digits] if cleaned_digits else []
+        
+        # Procesar y limpiar números encontrados
+        processed_numbers = []
+        for num in numbers:
+            # Limpiar espacios
+            num = re.sub(r'\s+', '', num)
+            # Reemplazar comas por puntos para estándar decimal
+            num = num.replace(',', '.')
+            # Validar que es un número válido
+            if re.match(r'^-?\d+\.?\d*$', num):
+                processed_numbers.append(num)
+        
+        # Devolver el número más probable (el más largo o primero encontrado)
+        if processed_numbers:
+            # Ordenar por longitud (número más completo)
+            processed_numbers.sort(key=len, reverse=True)
+            result = processed_numbers[0]
+            logger.debug(f"Números extraídos: {processed_numbers} -> seleccionado: '{result}'")
+            return result
+        
+        # Como último recurso, extraer solo dígitos consecutivos
+        digits_only = re.findall(r'\d+', text)
+        if digits_only:
+            result = ''.join(digits_only)
+            logger.debug(f"Extrayendo solo dígitos consecutivos: '{result}'")
+            return result
+        
+        logger.warning(f"No se pudieron extraer dígitos del texto: '{text}'")
+        return ""
+    
     def _call_ocr_space_api(
         self, 
         image_bytes: bytes, 
         language: str, 
         engine: int, 
         retries: int, 
-        timeout: int
+        timeout: int,
+        digits_only: bool = False
     ) -> Dict[str, Any]:
         """Llamar a la API de OCR.Space con reintentos"""
         
@@ -221,6 +336,14 @@ class OCRSpaceProvider(OCRProvider):
             "detectOrientation": True,
             "scale": True,
         }
+        
+        # Configuración específica para reconocimiento de dígitos
+        if digits_only:
+            data["isTable"] = True  # Ayuda con formato tabular de números
+            # OCR.Space no tiene un parámetro específico para solo dígitos
+            # pero podemos optimizar otros parámetros
+            data["detectOrientation"] = False  # Los medidores suelen estar bien orientados
+            logger.debug("Configuración para reconocimiento de dígitos activada")
         
         backoff = 2
         
@@ -266,6 +389,12 @@ class OCRSpaceProvider(OCRProvider):
                 
                 parsed_result = results[0]
                 text = parsed_result.get("ParsedText", "").strip()
+                
+                # Si es modo solo dígitos, filtrar el texto
+                if digits_only:
+                    original_text = text
+                    text = self._extract_digits_only(text)
+                    logger.debug(f"Filtrado de dígitos: '{original_text}' -> '{text}'")
                 
                 # Calcular confianza promedio si está disponible
                 confidence = self._calculate_confidence(parsed_result)
