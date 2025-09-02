@@ -431,9 +431,7 @@ def process_ocr():
                        provider=result.get('details', {}).get('ocr_provider'),
                        cached=result.get('cached', False))
         else:
-            logger.error("Pipeline OCR falló", 
-                        job_id=job_id,
-                        error=result.get('error_message'))
+            logger.error(f"Pipeline OCR falló: job_id={job_id}, error={result.get('error_message')}")
         
         return jsonify(response)
         

@@ -191,11 +191,7 @@ class OCRProcessor:
             # 9. Actualizar estadísticas
             self._update_stats(final_result)
             
-            logger.info("Pipeline OCR completado", 
-                       success=final_result['success'],
-                       confidence=final_confidence,
-                       provider=ocr_result.provider,
-                       total_time=total_time)
+            logger.info(f"Pipeline OCR completado: success={final_result['success']}, confidence={final_confidence:.1f}, provider={ocr_result.provider}, time={total_time:.2f}s")
             
             return final_result
             
