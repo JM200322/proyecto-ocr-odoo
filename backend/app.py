@@ -177,7 +177,7 @@ def login():
             }), 401
             
     except Exception as e:
-        logger.error("Error en autenticación", error=str(e))
+        logger.error("Error en autenticación", error_msg=str(e))
         return jsonify({
             'success': False,
             'message': 'Error interno del servidor'
@@ -202,7 +202,7 @@ def create_session():
         })
         
     except Exception as e:
-        logger.error("Error creando sesión", error=str(e))
+        logger.error("Error creando sesión", error_msg=str(e))
         return jsonify({
             'success': False,
             'message': 'Error interno del servidor'
@@ -228,7 +228,7 @@ def get_history():
         })
         
     except Exception as e:
-        logger.error("Error obteniendo historial", error=str(e))
+        logger.error("Error obteniendo historial", error_msg=str(e))
         return jsonify({
             'success': False,
             'message': 'Error obteniendo historial'
@@ -248,7 +248,7 @@ def get_statistics():
         })
         
     except Exception as e:
-        logger.error("Error obteniendo estadísticas", error=str(e))
+        logger.error("Error obteniendo estadísticas", error_msg=str(e))
         return jsonify({
             'success': False,
             'message': 'Error obteniendo estadísticas'
@@ -278,7 +278,7 @@ def export_data():
             })
         
     except Exception as e:
-        logger.error("Error exportando datos", error=str(e))
+        logger.error("Error exportando datos", error_msg=str(e))
         return jsonify({
             'success': False,
             'message': 'Error exportando datos'
@@ -452,12 +452,12 @@ def process_ocr():
                     processing_time=error_time
                 )
                 logger.error("Error en pipeline OCR", 
-                            error=str(e),
+                            error_msg=str(e),
                             job_id=error_job_id,
                             processing_time=error_time)
         except:
             logger.error("Error en pipeline OCR", 
-                        error=str(e),
+                        error_msg=str(e),
                         processing_time=error_time)
         
         return jsonify({

@@ -66,6 +66,43 @@ class OCRSpaceProvider(OCRProvider):
             'por', 'rus', 'slv', 'spa', 'swe', 'tur'
         ]
     
+    def _map_language_code(self, language: str) -> str:
+        """Mapear códigos de idioma estándar a códigos OCR.Space"""
+        language_mapping = {
+            'es': 'spa',
+            'en': 'eng', 
+            'fr': 'fre',
+            'de': 'ger',
+            'it': 'ita',
+            'pt': 'por',
+            'ru': 'rus',
+            'ar': 'ara',
+            'zh': 'chs',
+            'ja': 'jpn',
+            'ko': 'kor',
+            'pl': 'pol',
+            'sv': 'swe',
+            'tr': 'tur',
+            'nl': 'dut',
+            'da': 'dan',
+            'fi': 'fin',
+            'el': 'gre',
+            'hu': 'hun',
+            'hr': 'hrv',
+            'cs': 'cze',
+            'bg': 'bul',
+            'sl': 'slv'
+        }
+        
+        # Si ya es un código OCR.Space válido, devolverlo tal cual
+        if language in self.get_supported_languages():
+            return language
+            
+        # Mapear código estándar a OCR.Space
+        mapped_language = language_mapping.get(language.lower(), 'spa')
+        logger.debug(f"Mapeando idioma '{language}' a '{mapped_language}'")
+        return mapped_language
+    
     def process_image(
         self, 
         image: Image.Image, 
@@ -77,6 +114,10 @@ class OCRSpaceProvider(OCRProvider):
         
         start_time = time.time()
         engine = engine or self.config['default_engine']
+        
+        # Mapear código de idioma al formato OCR.Space
+        mapped_language = self._map_language_code(language)
+        logger.debug(f"Procesando imagen con idioma '{language}' -> '{mapped_language}'")
         
         try:
             # Validar imagen
@@ -108,7 +149,7 @@ class OCRSpaceProvider(OCRProvider):
             # Llamar a la API
             result = self._call_ocr_space_api(
                 image_bytes, 
-                language, 
+                mapped_language, 
                 engine, 
                 self.config['max_retries'], 
                 self.config['timeout']
@@ -233,8 +274,7 @@ class OCRSpaceProvider(OCRProvider):
                     "success": True,
                     "text": text,
                     "confidence": confidence,
-                    "raw_response": payload,
-                    "engine_used": engine
+                    "raw_response": payload
                 }
                 
             except requests.HTTPError as e:

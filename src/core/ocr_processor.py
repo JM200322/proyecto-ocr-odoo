@@ -203,7 +203,7 @@ class OCRProcessor:
             error_time = time.time() - start_time
             pipeline_log.append(f"❌ Error en pipeline: {str(e)}")
             
-            logger.error("Error en pipeline OCR", error=str(e), processing_time=error_time)
+            logger.error(f"Error en pipeline OCR: {str(e)}, processing_time={error_time}")
             
             return {
                 'success': False,
