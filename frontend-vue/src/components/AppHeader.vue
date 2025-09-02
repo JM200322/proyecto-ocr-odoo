@@ -1,6 +1,6 @@
 <template>
   <div class="header">
-    <h1>📱 OCR Ultra-Preciso v3.0</h1>
+    <h1>OCR</h1>
     <p>Extracción inteligente con OCR.Space API</p>
   </div>
 </template>

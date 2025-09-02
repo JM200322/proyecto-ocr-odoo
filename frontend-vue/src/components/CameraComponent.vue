@@ -34,13 +34,6 @@
       >
         {{ cameraButtonText }}
       </button>
-      <button 
-        class="btn btn-secondary" 
-        @click="flipCamera" 
-        :disabled="!stream"
-      >
-        🔄 Cambiar Cámara
-      </button>
     </div>
 
 
@@ -152,14 +145,6 @@ const stopCamera = () => {
   }
 }
 
-const flipCamera = async () => {
-  currentCamera.value = currentCamera.value === 'environment' ? 'user' : 'environment'
-  
-  if (stream.value) {
-    stopCamera()
-    await startCamera()
-  }
-}
 
 
 const captureAndProcess = async () => {
@@ -397,9 +382,6 @@ canvas {
 }
 
 .camera-controls {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
   margin-bottom: 20px;
 }
 
