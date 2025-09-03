@@ -1,13 +1,10 @@
-// Configuración del Backend
-// Para DESARROLLO LOCAL (localhost)
-// export const BACKEND_URL = 'http://127.0.0.1:5000';
+// frontend-vue/src/config.js
 
-// Para PRODUCCIÓN (Render)
-export const BACKEND_URL = 'https://proyecto-ocr-odoo.onrender.com';
+// Configuración automática del backend
+export const BACKEND_URL = 
+  process.env.NODE_ENV === 'production' 
+    ? '' // En producción, usar URL relativa (mismo servidor)
+    : 'http://localhost:5000'; // En desarrollo
 
-// Para DESARROLLO LOCAL con IP específica (si localhost no funciona)
-// export const BACKEND_URL = 'http://127.0.0.1:5000';
-
-console.log('🔧 Configuración del Backend:');
-console.log('📍 URL configurada:', BACKEND_URL);
-console.log('🌐 Entorno:', BACKEND_URL.includes('localhost') || BACKEND_URL.includes('127.0.0.1') ? 'DESARROLLO LOCAL' : 'PRODUCCIÓN');
+console.log('🔧 Backend URL:', BACKEND_URL || 'Relative URL (same origin)');
+console.log('🌍 Environment:', process.env.NODE_ENV);

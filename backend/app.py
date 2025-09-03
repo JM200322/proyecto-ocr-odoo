@@ -91,7 +91,7 @@ except ImportError as e:
     logger.error(f"Error cargando procesador OCR: {e}")
     logger.info("Usando modo legacy sin procesador modular")
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static')
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'ocr-odoo-secret-key-change-in-production')
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'jwt-secret-change-in-production')
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=24)
@@ -118,27 +118,34 @@ logger.info("Procesador OCR modular inicializado")
 @app.route('/')
 def index():
     """Servir el frontend Vue.js"""
-    try:
+    if os.path.exists('static/index.html'):
         return send_from_directory('static', 'index.html')
-    except Exception as e:
-        return f"Error sirviendo frontend: {e}", 500
+    return "Frontend not found. Please build Vue.js first.", 404
 
 @app.route('/<path:filename>')
 def serve_frontend_files(filename):
     """Servir archivos del frontend Vue.js con validación de seguridad"""
-    # No servir rutas que empiecen con 'api/'
+    # Si es una ruta de API, no servir archivos estáticos
     if filename.startswith('api/'):
-        return "API route not found", 404
+        return "API endpoint not found", 404
     
+    # Intentar servir el archivo solicitado
+    if os.path.exists(os.path.join('static', filename)):
+        try:
+            # Solo permitir ciertos tipos de archivos por seguridad
+            allowed_extensions = ['.html', '.js', '.css', '.png', '.jpg', '.jpeg', '.gif', '.ico', '.svg', '.woff', '.woff2', '.map', '.json']
+            file_ext = os.path.splitext(filename)[1].lower()
+            
+            if file_ext in allowed_extensions or not file_ext:  # Archivos sin extensión para Vue Router
+                return send_from_directory('static', filename)
+            else:
+                return "Tipo de archivo no permitido", 403
+        except Exception as e:
+            pass
+    
+    # Para Vue Router - siempre devolver index.html para rutas no encontradas
     try:
-        # Solo permitir ciertos tipos de archivos por seguridad
-        allowed_extensions = ['.html', '.js', '.css', '.png', '.jpg', '.jpeg', '.gif', '.ico', '.svg', '.woff', '.woff2', '.map']
-        file_ext = os.path.splitext(filename)[1].lower()
-        
-        if file_ext in allowed_extensions:
-            return send_from_directory('static', filename)
-        else:
-            return "Tipo de archivo no permitido", 403
+        return send_from_directory('static', 'index.html')
     except Exception as e:
         return f"Error sirviendo archivo: {e}", 404
 
@@ -688,11 +695,15 @@ if __name__ == '__main__':
     logger.info("Iniciando servidor OCR modular v3.0...")
     if OCR_PROCESSOR_AVAILABLE:
         logger.info(f"Proveedores disponibles: {ocr_processor.orchestrator.get_available_providers()}")
-    logger.info("Servidor disponible en: http://localhost:5000")
+    
+    # Puerto configurable para Render
+    port = int(os.environ.get('PORT', 5000))
+    logger.info(f"Servidor disponible en puerto: {port}")
+    
     # Agregar debug de rutas antes de ejecutar
     print("=== DEBUG DE RUTAS REGISTRADAS ===")
     for rule in app.url_map.iter_rules():
         print(f"  {rule.rule} -> {rule.endpoint} [{', '.join(rule.methods)}]")
     print("=====================================")
     
-    app.run(debug=False, host='0.0.0.0', port=5000)
+    app.run(debug=False, host='0.0.0.0', port=port)

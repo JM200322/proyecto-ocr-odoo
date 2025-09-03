@@ -1,16 +1,18 @@
 services:
   - type: web
-    name: ocr-odoo-backend
+    name: ocr-odoo-fullstack
     env: python
-    buildCommand: |
-      cd backend
-      pip install -r requirements_render.txt
-    startCommand: |
-      cd backend
-      python app.py
+    buildCommand: chmod +x build.sh && ./build.sh
+    startCommand: cd backend && python app.py
     envVars:
       - key: FLASK_ENV
         value: production
-      - key: PORT
-        value: 5000
+      - key: NODE_ENV
+        value: production
+      - key: PYTHON_VERSION
+        value: 3.9.18
+      - key: NODE_VERSION
+        value: 18.17.0
+      - key: NPM_VERSION
+        value: 9.6.7
     healthCheckPath: /api/health

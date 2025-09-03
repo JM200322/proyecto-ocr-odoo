@@ -1,0 +1,16 @@
+{
+  "name": "ocr-odoo-project",
+  "version": "3.0.0",
+  "private": true,
+  "scripts": {
+    "build:frontend": "cd frontend-vue && npm install && npm run build",
+    "build:backend": "cd backend && pip install -r requirements_render.txt",
+    "build": "npm run build:frontend && npm run build:backend",
+    "copy:dist": "cp -r frontend-vue/dist/* backend/static/",
+    "start": "cd backend && python app.py"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}
