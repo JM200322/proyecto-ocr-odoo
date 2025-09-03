@@ -11,7 +11,7 @@
       ></video>
       <canvas 
         ref="canvas" 
-        v-show="showCanvas"
+        v-show="showCanvas && !showCropEditor"
       ></canvas>
       <div class="camera-overlay" v-show="showVideo">
         <div 
@@ -21,8 +21,40 @@
       </div>
     </div>
 
+    <!-- Editor de Recorte -->
+    <div class="crop-editor" v-show="showCropEditor">
+      <div class="crop-container">
+        <canvas 
+          ref="cropCanvas"
+          @mousedown="startCrop"
+          @mousemove="updateCrop"
+          @mouseup="endCrop"
+          @touchstart="startCrop"
+          @touchmove="updateCrop"
+          @touchend="endCrop"
+        ></canvas>
+        <div class="crop-overlay" v-if="cropArea.active">
+          <div 
+            class="crop-selection"
+            :style="cropSelectionStyle"
+          ></div>
+        </div>
+      </div>
+      <div class="crop-controls">
+        <button class="btn btn-success" @click="applyCrop" :disabled="!cropArea.active">
+          ✂️ Recortar y Procesar
+        </button>
+        <button class="btn btn-secondary" @click="resetCrop">
+          🔄 Reiniciar
+        </button>
+        <button class="btn btn-warning" @click="cancelCrop">
+          ❌ Cancelar
+        </button>
+      </div>
+    </div>
+
     <!-- Preview de imagen capturada -->
-    <div class="image-preview" v-show="previewImage">
+    <div class="image-preview" v-show="previewImage && !showCropEditor">
       <img :src="previewImage" alt="Imagen capturada">
     </div>
 
@@ -52,10 +84,10 @@
 
     <button 
       class="btn btn-success" 
-      @click="captureAndProcess" 
+      @click="captureImage" 
       :disabled="!stream || isProcessing"
     >
-      📸 Capturar y Procesar (Espacio)
+      📸 Capturar Imagen (Espacio)
     </button>
   </div>
 </template>
@@ -69,6 +101,7 @@ const emit = defineEmits(['capture-complete', 'status-change', 'progress-change'
 // Referencias del DOM
 const video = ref(null)
 const canvas = ref(null)
+const cropCanvas = ref(null)
 
 // Estado reactivo
 const stream = ref(null)
@@ -76,11 +109,23 @@ const currentCamera = ref('environment')
 const isProcessing = ref(false)
 const showVideo = ref(false)
 const showCanvas = ref(false)
+const showCropEditor = ref(false)
 const previewImage = ref('')
+const originalImageData = ref('')
 // Marco fijo centrado (80% ancho, 60% alto)
 const frameWidth = 80
 const frameHeight = 60
 const digitsOnly = ref(false)
+
+// Estado del editor de recorte
+const cropArea = ref({
+  active: false,
+  startX: 0,
+  startY: 0,
+  endX: 0,
+  endY: 0,
+  isDragging: false
+})
 
 // Computed
 const cameraButtonText = computed(() => {
@@ -91,6 +136,25 @@ const frameStyle = computed(() => ({
   width: frameWidth + '%',
   height: frameHeight + '%'
 }))
+
+const cropSelectionStyle = computed(() => {
+  if (!cropArea.value.active) return {}
+  
+  const rect = cropCanvas.value?.getBoundingClientRect()
+  if (!rect) return {}
+  
+  const left = Math.min(cropArea.value.startX, cropArea.value.endX)
+  const top = Math.min(cropArea.value.startY, cropArea.value.endY)
+  const width = Math.abs(cropArea.value.endX - cropArea.value.startX)
+  const height = Math.abs(cropArea.value.endY - cropArea.value.startY)
+  
+  return {
+    left: left + 'px',
+    top: top + 'px',
+    width: width + 'px',
+    height: height + 'px'
+  }
+})
 
 // Métodos
 const toggleCamera = async () => {
@@ -161,9 +225,132 @@ const stopCamera = () => {
 
 
 
-const captureAndProcess = async () => {
+const captureImage = async () => {
   if (!stream.value || isProcessing.value) return
 
+  try {
+    if (video.value.videoWidth === 0 || video.value.videoHeight === 0) {
+      throw new Error('El video no está listo. Espera un momento.')
+    }
+
+    console.log(`=== CAPTURANDO IMAGEN ===`)
+    console.log(`Video: ${video.value.videoWidth}x${video.value.videoHeight}`)
+
+    // Capturar imagen completa del video
+    const ctx = canvas.value.getContext('2d')
+    canvas.value.width = video.value.videoWidth
+    canvas.value.height = video.value.videoHeight
+    
+    ctx.drawImage(video.value, 0, 0)
+    
+    // Guardar imagen original para el editor de recorte
+    originalImageData.value = canvas.value.toDataURL('image/jpeg', 0.95)
+    
+    // Mostrar editor de recorte
+    showVideo.value = false
+    showCanvas.value = false
+    showCropEditor.value = true
+    
+    // Configurar canvas del editor con la imagen capturada
+    setupCropEditor()
+    
+    emit('status-change', '✂️ Selecciona el área a procesar arrastrando sobre la imagen', 'info')
+
+  } catch (error) {
+    console.error('Error en captura:', error)
+    emit('status-change', `Error: ${error.message}`, 'error')
+  }
+}
+
+const setupCropEditor = () => {
+  if (!cropCanvas.value || !originalImageData.value) return
+  
+  const img = new Image()
+  img.onload = () => {
+    const ctx = cropCanvas.value.getContext('2d')
+    
+    // Calcular tamaño para ajustar al contenedor manteniendo aspecto
+    const maxWidth = 400
+    const maxHeight = 300
+    
+    let canvasWidth = img.width
+    let canvasHeight = img.height
+    
+    if (canvasWidth > maxWidth) {
+      canvasHeight = (canvasHeight * maxWidth) / canvasWidth
+      canvasWidth = maxWidth
+    }
+    
+    if (canvasHeight > maxHeight) {
+      canvasWidth = (canvasWidth * maxHeight) / canvasHeight
+      canvasHeight = maxHeight
+    }
+    
+    cropCanvas.value.width = canvasWidth
+    cropCanvas.value.height = canvasHeight
+    
+    ctx.drawImage(img, 0, 0, canvasWidth, canvasHeight)
+    
+    // Resetear área de recorte
+    cropArea.value.active = false
+  }
+  img.src = originalImageData.value
+}
+
+// Funciones del editor de recorte
+const getEventCoordinates = (e) => {
+  const rect = cropCanvas.value.getBoundingClientRect()
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY
+  
+  return {
+    x: clientX - rect.left,
+    y: clientY - rect.top
+  }
+}
+
+const startCrop = (e) => {
+  e.preventDefault()
+  const coords = getEventCoordinates(e)
+  
+  cropArea.value = {
+    active: true,
+    startX: coords.x,
+    startY: coords.y,
+    endX: coords.x,
+    endY: coords.y,
+    isDragging: true
+  }
+}
+
+const updateCrop = (e) => {
+  if (!cropArea.value.isDragging) return
+  e.preventDefault()
+  
+  const coords = getEventCoordinates(e)
+  cropArea.value.endX = coords.x
+  cropArea.value.endY = coords.y
+}
+
+const endCrop = (e) => {
+  e.preventDefault()
+  cropArea.value.isDragging = false
+  
+  // Validar que el área tenga un tamaño mínimo
+  const width = Math.abs(cropArea.value.endX - cropArea.value.startX)
+  const height = Math.abs(cropArea.value.endY - cropArea.value.startY)
+  
+  if (width < 10 || height < 10) {
+    cropArea.value.active = false
+    emit('status-change', '⚠️ Área muy pequeña. Selecciona un área más grande.', 'warning')
+  } else {
+    emit('status-change', '✅ Área seleccionada. Haz clic en "Recortar y Procesar".', 'success')
+  }
+}
+
+const applyCrop = async () => {
+  if (!cropArea.value.active || !cropCanvas.value) return
+  
   // Verificar conexión con backend
   try {
     const response = await fetch(`${BACKEND_URL}/api/health`)
@@ -178,64 +365,66 @@ const captureAndProcess = async () => {
   }
 
   isProcessing.value = true
-
+  
   try {
-    if (video.value.videoWidth === 0 || video.value.videoHeight === 0) {
-      throw new Error('El video no está listo. Espera un momento.')
-    }
-
-    console.log(`=== INICIANDO CAPTURA Y PROCESAMIENTO v3.0 ===`)
-    console.log(`Video original: ${video.value.videoWidth}x${video.value.videoHeight}`)
-
-    // Primero capturar imagen completa en canvas temporal
-    const tempCanvas = document.createElement('canvas')
-    const tempCtx = tempCanvas.getContext('2d')
-    tempCanvas.width = video.value.videoWidth
-    tempCanvas.height = video.value.videoHeight
+    // Calcular coordenadas de recorte en la imagen original
+    const canvasRect = cropCanvas.value.getBoundingClientRect()
+    const scaleX = canvas.value.width / cropCanvas.value.width
+    const scaleY = canvas.value.height / cropCanvas.value.height
     
-    // Dibujar video completo en canvas temporal
-    tempCtx.drawImage(video.value, 0, 0)
+    const left = Math.min(cropArea.value.startX, cropArea.value.endX) * scaleX
+    const top = Math.min(cropArea.value.startY, cropArea.value.endY) * scaleY
+    const width = Math.abs(cropArea.value.endX - cropArea.value.startX) * scaleX
+    const height = Math.abs(cropArea.value.endY - cropArea.value.startY) * scaleY
     
-    // Calcular área del marco (80% ancho, 60% alto, centrado)
-    const videoWidth = video.value.videoWidth
-    const videoHeight = video.value.videoHeight
-    const cropWidth = Math.round((frameWidth / 100) * videoWidth)
-    const cropHeight = Math.round((frameHeight / 100) * videoHeight)
-    const cropX = Math.round((videoWidth - cropWidth) / 2)
-    const cropY = Math.round((videoHeight - cropHeight) / 2)
+    // Crear canvas con área recortada
+    const croppedCanvas = document.createElement('canvas')
+    const croppedCtx = croppedCanvas.getContext('2d')
+    croppedCanvas.width = width
+    croppedCanvas.height = height
     
-    console.log(`🔍 Recortando área: ${cropWidth}x${cropHeight} desde posición (${cropX}, ${cropY})`)
+    // Extraer área recortada de la imagen original
+    const originalCtx = canvas.value.getContext('2d')
+    const imageData = originalCtx.getImageData(left, top, width, height)
+    croppedCtx.putImageData(imageData, 0, 0)
     
-    // Extraer solo el área del marco del canvas temporal
-    const imageData = tempCtx.getImageData(cropX, cropY, cropWidth, cropHeight)
-    
-    // Configurar canvas final con el tamaño del recorte
+    // Actualizar canvas principal con la imagen recortada
+    canvas.value.width = width
+    canvas.value.height = height
     const ctx = canvas.value.getContext('2d')
-    canvas.value.width = cropWidth
-    canvas.value.height = cropHeight
-    
-    // Limpiar y dibujar solo el área recortada
-    ctx.clearRect(0, 0, cropWidth, cropHeight)
     ctx.putImageData(imageData, 0, 0)
     
-    console.log(`✂️ Imagen recortada: ${canvas.value.width}x${canvas.value.height}px`)
-
-    // Mostrar imagen capturada
-    showVideo.value = false
+    // Actualizar preview
+    previewImage.value = canvas.value.toDataURL('image/jpeg', 0.95)
+    
+    console.log(`✂️ Imagen recortada: ${Math.round(width)}x${Math.round(height)}px`)
+    
+    // Ocultar editor y mostrar resultado
+    showCropEditor.value = false
     showCanvas.value = true
     
-    // Mostrar preview del área recortada
-    previewImage.value = canvas.value.toDataURL('image/jpeg', 0.95)
-
-    // Procesar con sistema avanzado
+    // Procesar con OCR
     await processOCRWithAdvancedSystem()
-
+    
   } catch (error) {
-    console.error('Error en captura:', error)
+    console.error('Error en recorte:', error)
     emit('status-change', `Error: ${error.message}`, 'error')
   } finally {
     isProcessing.value = false
   }
+}
+
+const resetCrop = () => {
+  cropArea.value.active = false
+  setupCropEditor()
+  emit('status-change', '✂️ Selecciona el área a procesar arrastrando sobre la imagen', 'info')
+}
+
+const cancelCrop = () => {
+  showCropEditor.value = false
+  showVideo.value = true
+  cropArea.value.active = false
+  emit('status-change', '📷 Cámara activa. Toma otra foto si es necesario.', 'info')
 }
 
 const processOCRWithAdvancedSystem = async () => {
@@ -322,13 +511,15 @@ const handleKeydown = (e) => {
   if (e.code === 'Space') {
     e.preventDefault()
     if (!isProcessing.value && stream.value) {
-      captureAndProcess()
+      captureImage()
     }
   }
   
   if (e.key === 'Escape') {
     e.preventDefault()
-    if (showCanvas.value) {
+    if (showCropEditor.value) {
+      cancelCrop()
+    } else if (showCanvas.value) {
       showVideo.value = true
       showCanvas.value = false
       previewImage.value = ''
@@ -446,9 +637,109 @@ canvas {
   border: 2px solid #e2e8f0;
 }
 
+/* Editor de Recorte */
+.crop-editor {
+  margin-bottom: 20px;
+}
+
+.crop-container {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 15px;
+  background: #f8f9fa;
+  border-radius: 12px;
+  padding: 10px;
+  border: 2px solid #e9ecef;
+}
+
+.crop-container canvas {
+  cursor: crosshair;
+  border: 2px solid #4a5568;
+  border-radius: 8px;
+  background: white;
+}
+
+.crop-overlay {
+  position: absolute;
+  top: 10px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  display: flex;
+  justify-content: center;
+}
+
+.crop-selection {
+  position: absolute;
+  border: 2px dashed #38a169;
+  background: rgba(56, 161, 105, 0.2);
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+.crop-controls {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.crop-controls .btn {
+  min-width: 120px;
+  padding: 10px 15px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.crop-controls .btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.crop-controls .btn-success {
+  background: #38a169;
+  color: white;
+}
+
+.crop-controls .btn-success:hover:not(:disabled) {
+  background: #2f855a;
+}
+
+.crop-controls .btn-secondary {
+  background: #718096;
+  color: white;
+}
+
+.crop-controls .btn-secondary:hover {
+  background: #4a5568;
+}
+
+.crop-controls .btn-warning {
+  background: #ed8936;
+  color: white;
+}
+
+.crop-controls .btn-warning:hover {
+  background: #dd6b20;
+}
+
 @media (max-width: 480px) {
   .camera-controls {
     grid-template-columns: 1fr;
+  }
+  
+  .crop-controls {
+    flex-direction: column;
+  }
+  
+  .crop-controls .btn {
+    min-width: auto;
+    width: 100%;
   }
 }
 </style>
