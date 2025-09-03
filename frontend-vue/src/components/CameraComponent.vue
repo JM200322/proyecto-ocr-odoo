@@ -226,23 +226,19 @@ const stopCamera = () => {
 
 
 const captureImage = async () => {
-  console.log('=== INICIANDO CAPTURA ===')
-  console.log('Stream:', !!stream.value)
-  console.log('Processing:', isProcessing.value)
+  emit('status-change', '🔍 DEBUG: Iniciando captura...', 'info')
   
   if (!stream.value || isProcessing.value) {
-    console.log('Saliendo: stream o processing')
+    emit('status-change', '❌ DEBUG: No hay stream o está procesando', 'error')
     return
   }
 
   try {
-    console.log('Video dimensions:', video.value.videoWidth, 'x', video.value.videoHeight)
-    
     if (video.value.videoWidth === 0 || video.value.videoHeight === 0) {
       throw new Error('El video no está listo. Espera un momento.')
     }
 
-    console.log(`=== CAPTURANDO IMAGEN ===`)
+    emit('status-change', `📸 DEBUG: Capturando video ${video.value.videoWidth}x${video.value.videoHeight}`, 'info')
 
     // Capturar imagen completa del video
     const ctx = canvas.value.getContext('2d')
@@ -253,24 +249,23 @@ const captureImage = async () => {
     
     // Guardar imagen original para el editor de recorte
     originalImageData.value = canvas.value.toDataURL('image/jpeg', 0.95)
-    console.log('Imagen original guardada, tamaño:', originalImageData.value.length)
+    emit('status-change', `💾 DEBUG: Imagen guardada (${Math.round(originalImageData.value.length/1024)}KB)`, 'info')
     
     // Mostrar editor de recorte
-    console.log('Cambiando estados de vista...')
     showVideo.value = false
     showCanvas.value = false
     showCropEditor.value = true
     
-    console.log('Estados actuales:')
-    console.log('showVideo:', showVideo.value)
-    console.log('showCanvas:', showCanvas.value)
-    console.log('showCropEditor:', showCropEditor.value)
+    emit('status-change', `🔄 DEBUG: Cambiando a editor. showCropEditor=${showCropEditor.value}`, 'info')
     
     // Configurar canvas del editor con la imagen capturada
-    console.log('Configurando crop editor...')
-    await setupCropEditor()
+    setTimeout(() => {
+      setupCropEditor()
+    }, 100)
     
-    emit('status-change', '✂️ Selecciona el área a procesar arrastrando sobre la imagen', 'info')
+    setTimeout(() => {
+      emit('status-change', '✂️ Selecciona el área a procesar arrastrando sobre la imagen', 'info')
+    }, 500)
 
   } catch (error) {
     console.error('Error en captura:', error)
@@ -279,18 +274,16 @@ const captureImage = async () => {
 }
 
 const setupCropEditor = () => {
-  console.log('setupCropEditor llamado')
-  console.log('cropCanvas.value:', !!cropCanvas.value)
-  console.log('originalImageData.value length:', originalImageData.value?.length)
-  
   if (!cropCanvas.value || !originalImageData.value) {
-    console.log('Saliendo de setupCropEditor: falta cropCanvas o originalImageData')
+    emit('status-change', '❌ DEBUG: Falta cropCanvas o imagen original', 'error')
     return
   }
   
+  emit('status-change', '🖼️ DEBUG: Configurando editor de recorte...', 'info')
+  
   const img = new Image()
   img.onload = () => {
-    console.log('Imagen cargada:', img.width, 'x', img.height)
+    emit('status-change', `🎯 DEBUG: Imagen cargada ${img.width}x${img.height}`, 'success')
     
     const ctx = cropCanvas.value.getContext('2d')
     
@@ -311,8 +304,6 @@ const setupCropEditor = () => {
       canvasHeight = maxHeight
     }
     
-    console.log('Canvas dimensions:', canvasWidth, 'x', canvasHeight)
-    
     cropCanvas.value.width = canvasWidth
     cropCanvas.value.height = canvasHeight
     
@@ -321,11 +312,11 @@ const setupCropEditor = () => {
     // Resetear área de recorte
     cropArea.value.active = false
     
-    console.log('Setup crop editor completado')
+    emit('status-change', `✅ DEBUG: Editor listo ${canvasWidth}x${canvasHeight}`, 'success')
   }
   
   img.onerror = () => {
-    console.error('Error cargando imagen para crop editor')
+    emit('status-change', '❌ DEBUG: Error cargando imagen', 'error')
   }
   
   img.src = originalImageData.value
