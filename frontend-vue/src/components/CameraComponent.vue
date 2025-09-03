@@ -185,45 +185,46 @@ const captureAndProcess = async () => {
     }
 
     console.log(`=== INICIANDO CAPTURA Y PROCESAMIENTO v3.0 ===`)
-    console.log(`Capturando imagen: ${video.value.videoWidth}x${video.value.videoHeight}`)
+    console.log(`Video original: ${video.value.videoWidth}x${video.value.videoHeight}`)
 
-    // Capturar solo el área del marco verde
-    // Calcular coordenadas directamente sobre la resolución del video
+    // Primero capturar imagen completa en canvas temporal
+    const tempCanvas = document.createElement('canvas')
+    const tempCtx = tempCanvas.getContext('2d')
+    tempCanvas.width = video.value.videoWidth
+    tempCanvas.height = video.value.videoHeight
+    
+    // Dibujar video completo en canvas temporal
+    tempCtx.drawImage(video.value, 0, 0)
+    
+    // Calcular área del marco (80% ancho, 60% alto, centrado)
     const videoWidth = video.value.videoWidth
     const videoHeight = video.value.videoHeight
+    const cropWidth = Math.round((frameWidth / 100) * videoWidth)
+    const cropHeight = Math.round((frameHeight / 100) * videoHeight)
+    const cropX = Math.round((videoWidth - cropWidth) / 2)
+    const cropY = Math.round((videoHeight - cropHeight) / 2)
     
-    // Calcular el marco en la resolución real del video
-    const sourceWidth = (frameWidth / 100) * videoWidth
-    const sourceHeight = (frameHeight / 100) * videoHeight
-    const sourceX = (videoWidth - sourceWidth) / 2
-    const sourceY = (videoHeight - sourceHeight) / 2
+    console.log(`🔍 Recortando área: ${cropWidth}x${cropHeight} desde posición (${cropX}, ${cropY})`)
     
-    // Configurar canvas para la resolución del marco recortado
+    // Extraer solo el área del marco del canvas temporal
+    const imageData = tempCtx.getImageData(cropX, cropY, cropWidth, cropHeight)
+    
+    // Configurar canvas final con el tamaño del recorte
     const ctx = canvas.value.getContext('2d')
-    canvas.value.width = Math.round(sourceWidth)
-    canvas.value.height = Math.round(sourceHeight)
+    canvas.value.width = cropWidth
+    canvas.value.height = cropHeight
     
-    // Limpiar canvas
-    ctx.clearRect(0, 0, canvas.value.width, canvas.value.height)
+    // Limpiar y dibujar solo el área recortada
+    ctx.clearRect(0, 0, cropWidth, cropHeight)
+    ctx.putImageData(imageData, 0, 0)
     
-    ctx.imageSmoothingEnabled = true
-    ctx.imageSmoothingQuality = 'high'
-    
-    // Capturar SOLO el área del marco (recortar)
-    ctx.drawImage(
-      video.value,
-      Math.round(sourceX), Math.round(sourceY), Math.round(sourceWidth), Math.round(sourceHeight),  // Área fuente (solo el marco)
-      0, 0, Math.round(sourceWidth), Math.round(sourceHeight)                                       // Área destino (canvas completo)
-    )
-    
-    console.log(`📐 Marco de enfoque: ${Math.round(sourceWidth)}x${Math.round(sourceHeight)}px`)
-    console.log(`📍 Posición: (${Math.round(sourceX)}, ${Math.round(sourceY)})`)
+    console.log(`✂️ Imagen recortada: ${canvas.value.width}x${canvas.value.height}px`)
 
     // Mostrar imagen capturada
     showVideo.value = false
     showCanvas.value = true
     
-    // Mostrar preview
+    // Mostrar preview del área recortada
     previewImage.value = canvas.value.toDataURL('image/jpeg', 0.95)
 
     // Procesar con sistema avanzado
