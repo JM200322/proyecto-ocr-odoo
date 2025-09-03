@@ -226,15 +226,23 @@ const stopCamera = () => {
 
 
 const captureImage = async () => {
-  if (!stream.value || isProcessing.value) return
+  console.log('=== INICIANDO CAPTURA ===')
+  console.log('Stream:', !!stream.value)
+  console.log('Processing:', isProcessing.value)
+  
+  if (!stream.value || isProcessing.value) {
+    console.log('Saliendo: stream o processing')
+    return
+  }
 
   try {
+    console.log('Video dimensions:', video.value.videoWidth, 'x', video.value.videoHeight)
+    
     if (video.value.videoWidth === 0 || video.value.videoHeight === 0) {
       throw new Error('El video no está listo. Espera un momento.')
     }
 
     console.log(`=== CAPTURANDO IMAGEN ===`)
-    console.log(`Video: ${video.value.videoWidth}x${video.value.videoHeight}`)
 
     // Capturar imagen completa del video
     const ctx = canvas.value.getContext('2d')
@@ -245,14 +253,22 @@ const captureImage = async () => {
     
     // Guardar imagen original para el editor de recorte
     originalImageData.value = canvas.value.toDataURL('image/jpeg', 0.95)
+    console.log('Imagen original guardada, tamaño:', originalImageData.value.length)
     
     // Mostrar editor de recorte
+    console.log('Cambiando estados de vista...')
     showVideo.value = false
     showCanvas.value = false
     showCropEditor.value = true
     
+    console.log('Estados actuales:')
+    console.log('showVideo:', showVideo.value)
+    console.log('showCanvas:', showCanvas.value)
+    console.log('showCropEditor:', showCropEditor.value)
+    
     // Configurar canvas del editor con la imagen capturada
-    setupCropEditor()
+    console.log('Configurando crop editor...')
+    await setupCropEditor()
     
     emit('status-change', '✂️ Selecciona el área a procesar arrastrando sobre la imagen', 'info')
 
@@ -263,10 +279,19 @@ const captureImage = async () => {
 }
 
 const setupCropEditor = () => {
-  if (!cropCanvas.value || !originalImageData.value) return
+  console.log('setupCropEditor llamado')
+  console.log('cropCanvas.value:', !!cropCanvas.value)
+  console.log('originalImageData.value length:', originalImageData.value?.length)
+  
+  if (!cropCanvas.value || !originalImageData.value) {
+    console.log('Saliendo de setupCropEditor: falta cropCanvas o originalImageData')
+    return
+  }
   
   const img = new Image()
   img.onload = () => {
+    console.log('Imagen cargada:', img.width, 'x', img.height)
+    
     const ctx = cropCanvas.value.getContext('2d')
     
     // Calcular tamaño para ajustar al contenedor manteniendo aspecto
@@ -286,6 +311,8 @@ const setupCropEditor = () => {
       canvasHeight = maxHeight
     }
     
+    console.log('Canvas dimensions:', canvasWidth, 'x', canvasHeight)
+    
     cropCanvas.value.width = canvasWidth
     cropCanvas.value.height = canvasHeight
     
@@ -293,7 +320,14 @@ const setupCropEditor = () => {
     
     // Resetear área de recorte
     cropArea.value.active = false
+    
+    console.log('Setup crop editor completado')
   }
+  
+  img.onerror = () => {
+    console.error('Error cargando imagen para crop editor')
+  }
+  
   img.src = originalImageData.value
 }
 
