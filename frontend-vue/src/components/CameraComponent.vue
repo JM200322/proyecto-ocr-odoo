@@ -198,19 +198,22 @@ const captureAndProcess = async () => {
     const sourceX = (videoWidth - sourceWidth) / 2
     const sourceY = (videoHeight - sourceHeight) / 2
     
-    // Configurar canvas para la resolución del marco
+    // Configurar canvas para la resolución del marco recortado
     const ctx = canvas.value.getContext('2d')
-    canvas.value.width = sourceWidth
-    canvas.value.height = sourceHeight
+    canvas.value.width = Math.round(sourceWidth)
+    canvas.value.height = Math.round(sourceHeight)
+    
+    // Limpiar canvas
+    ctx.clearRect(0, 0, canvas.value.width, canvas.value.height)
     
     ctx.imageSmoothingEnabled = true
     ctx.imageSmoothingQuality = 'high'
     
-    // Capturar solo el área del marco
+    // Capturar SOLO el área del marco (recortar)
     ctx.drawImage(
       video.value,
-      sourceX, sourceY, sourceWidth, sourceHeight,  // Área fuente (marco)
-      0, 0, sourceWidth, sourceHeight               // Área destino (canvas completo)
+      Math.round(sourceX), Math.round(sourceY), Math.round(sourceWidth), Math.round(sourceHeight),  // Área fuente (solo el marco)
+      0, 0, Math.round(sourceWidth), Math.round(sourceHeight)                                       // Área destino (canvas completo)
     )
     
     console.log(`📐 Marco de enfoque: ${Math.round(sourceWidth)}x${Math.round(sourceHeight)}px`)
@@ -364,10 +367,12 @@ video {
 
 canvas {
   width: 100%;
-  height: 300px;
+  height: auto;
+  max-height: 300px;
   object-fit: contain;
   background: #f7fafc;
   border-radius: 12px;
+  border: 2px solid #38a169;
 }
 
 .camera-overlay {
