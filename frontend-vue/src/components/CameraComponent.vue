@@ -22,9 +22,7 @@
     </div>
 
     <!-- Editor de Recorte -->
-    <div class="crop-editor" v-show="showCropEditor" style="background: yellow; padding: 20px; margin: 20px; border: 5px solid red;">
-      <h2 style="color: red; font-size: 24px;">EDITOR DE RECORTE ACTIVO</h2>
-      <p>showCropEditor: {{ showCropEditor }}</p>
+    <div class="crop-editor" v-show="showCropEditor">
       <div class="crop-container">
         <canvas 
           ref="cropCanvas"
@@ -34,7 +32,6 @@
           @touchstart="startCrop"
           @touchmove="updateCrop"
           @touchend="endCrop"
-          style="border: 3px solid blue;"
         ></canvas>
         <div class="crop-overlay" v-if="cropArea.active">
           <div 
@@ -52,9 +49,6 @@
         </button>
         <button class="btn btn-warning" @click="cancelCrop">
           ❌ Cancelar
-        </button>
-        <button class="btn btn-info" @click="showCropEditor = !showCropEditor">
-          🔧 Toggle Editor (TEST)
         </button>
       </div>
     </div>
@@ -232,19 +226,12 @@ const stopCamera = () => {
 
 
 const captureImage = async () => {
-  emit('status-change', '🔍 DEBUG: Iniciando captura...', 'info')
-  
-  if (!stream.value || isProcessing.value) {
-    emit('status-change', '❌ DEBUG: No hay stream o está procesando', 'error')
-    return
-  }
+  if (!stream.value || isProcessing.value) return
 
   try {
     if (video.value.videoWidth === 0 || video.value.videoHeight === 0) {
       throw new Error('El video no está listo. Espera un momento.')
     }
-
-    emit('status-change', `📸 DEBUG: Capturando video ${video.value.videoWidth}x${video.value.videoHeight}`, 'info')
 
     // Capturar imagen completa del video
     const ctx = canvas.value.getContext('2d')
@@ -255,14 +242,11 @@ const captureImage = async () => {
     
     // Guardar imagen original para el editor de recorte
     originalImageData.value = canvas.value.toDataURL('image/jpeg', 0.95)
-    emit('status-change', `💾 DEBUG: Imagen guardada (${Math.round(originalImageData.value.length/1024)}KB)`, 'info')
     
     // Mostrar editor de recorte
     showVideo.value = false
     showCanvas.value = false
     showCropEditor.value = true
-    
-    emit('status-change', `🔄 DEBUG: Cambiando a editor. showCropEditor=${showCropEditor.value}`, 'info')
     
     // Configurar canvas del editor con la imagen capturada
     setTimeout(() => {
@@ -281,16 +265,11 @@ const captureImage = async () => {
 
 const setupCropEditor = () => {
   if (!cropCanvas.value || !originalImageData.value) {
-    emit('status-change', '❌ DEBUG: Falta cropCanvas o imagen original', 'error')
     return
   }
   
-  emit('status-change', '🖼️ DEBUG: Configurando editor de recorte...', 'info')
-  
   const img = new Image()
   img.onload = () => {
-    emit('status-change', `🎯 DEBUG: Imagen cargada ${img.width}x${img.height}`, 'success')
-    
     const ctx = cropCanvas.value.getContext('2d')
     
     // Calcular tamaño para ajustar al contenedor manteniendo aspecto
@@ -317,12 +296,10 @@ const setupCropEditor = () => {
     
     // Resetear área de recorte
     cropArea.value.active = false
-    
-    emit('status-change', `✅ DEBUG: Editor listo ${canvasWidth}x${canvasHeight}`, 'success')
   }
   
   img.onerror = () => {
-    emit('status-change', '❌ DEBUG: Error cargando imagen', 'error')
+    emit('status-change', '❌ Error cargando imagen para recorte', 'error')
   }
   
   img.src = originalImageData.value
