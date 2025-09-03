@@ -13,8 +13,12 @@ import uuid
 import hashlib
 from datetime import datetime, timedelta
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
-import cv2
-import numpy as np
+try:
+    import cv2
+    import numpy as np
+    CV2_AVAILABLE = True
+except ImportError:
+    CV2_AVAILABLE = False
 # Importar módulos locales
 import sys
 import os
