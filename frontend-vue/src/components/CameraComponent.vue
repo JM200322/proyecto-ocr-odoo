@@ -188,22 +188,15 @@ const captureAndProcess = async () => {
     console.log(`Capturando imagen: ${video.value.videoWidth}x${video.value.videoHeight}`)
 
     // Capturar solo el área del marco verde
-    const videoRect = video.value.getBoundingClientRect()
+    // Calcular coordenadas directamente sobre la resolución del video
+    const videoWidth = video.value.videoWidth
+    const videoHeight = video.value.videoHeight
     
-    // Calcular las coordenadas del marco relativo al video
-    const frameWidthPx = (frameWidth / 100) * videoRect.width
-    const frameHeightPx = (frameHeight / 100) * videoRect.height
-    const frameLeft = (videoRect.width - frameWidthPx) / 2
-    const frameTop = (videoRect.height - frameHeightPx) / 2
-    
-    // Ajustar para la resolución real del video
-    const scaleX = video.value.videoWidth / videoRect.width
-    const scaleY = video.value.videoHeight / videoRect.height
-    
-    const sourceX = frameLeft * scaleX
-    const sourceY = frameTop * scaleY
-    const sourceWidth = frameWidthPx * scaleX
-    const sourceHeight = frameHeightPx * scaleY
+    // Calcular el marco en la resolución real del video
+    const sourceWidth = (frameWidth / 100) * videoWidth
+    const sourceHeight = (frameHeight / 100) * videoHeight
+    const sourceX = (videoWidth - sourceWidth) / 2
+    const sourceY = (videoHeight - sourceHeight) / 2
     
     // Configurar canvas para la resolución del marco
     const ctx = canvas.value.getContext('2d')
