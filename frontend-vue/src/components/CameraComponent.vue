@@ -22,7 +22,9 @@
     </div>
 
     <!-- Editor de Recorte -->
-    <div class="crop-editor" v-show="showCropEditor">
+    <div class="crop-editor" v-show="showCropEditor" style="background: yellow; padding: 20px; margin: 20px; border: 5px solid red;">
+      <h2 style="color: red; font-size: 24px;">EDITOR DE RECORTE ACTIVO</h2>
+      <p>showCropEditor: {{ showCropEditor }}</p>
       <div class="crop-container">
         <canvas 
           ref="cropCanvas"
@@ -32,6 +34,7 @@
           @touchstart="startCrop"
           @touchmove="updateCrop"
           @touchend="endCrop"
+          style="border: 3px solid blue;"
         ></canvas>
         <div class="crop-overlay" v-if="cropArea.active">
           <div 
@@ -49,6 +52,9 @@
         </button>
         <button class="btn btn-warning" @click="cancelCrop">
           ❌ Cancelar
+        </button>
+        <button class="btn btn-info" @click="showCropEditor = !showCropEditor">
+          🔧 Toggle Editor (TEST)
         </button>
       </div>
     </div>
